@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
-            "args": ["-isServer=false"]
+            "args": ["-isServer=false", "-inFile=/home/marten/Downloads/10M.file"]
         }
     ]
 }
