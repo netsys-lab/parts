@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	log "github.com/sirupsen/logrus"
+)
 
 func IndexOf(element int64, data []int64) int {
 	for k, v := range data {
@@ -12,7 +16,12 @@ func IndexOf(element int64, data []int64) int {
 }
 
 func RemoveFromSlice(s []int64, i int64) []int64 {
-	s[IndexOf(i, s)] = s[len(s)-1]
+	index := IndexOf(i, s)
+	if index == -1 {
+		log.Infof("Received index -1 for val %d", i)
+		return s
+	}
+	s[index] = s[len(s)-1]
 	return s[:len(s)-1]
 }
 

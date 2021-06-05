@@ -51,7 +51,7 @@ type BlocksSock struct {
 	missingSequenceNums        [][]int64
 	startSequenceNumbers       []int64
 	udpCons                    []net.Conn
-	ctrlConn                   net.Conn
+	ctrlConn                   *net.UDPConn
 	modes                      []int
 	receivedBytes              int64
 	lastReceivedBytes          int64
@@ -61,6 +61,8 @@ type BlocksSock struct {
 	processedPackets           int64
 	sentPacets                 int64
 	blockConns                 []*BlocksConn
+	remoteCtrlAddr             *net.UDPAddr
+	localCtrlAddr              *net.UDPAddr
 }
 
 func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int) *BlocksSock {
@@ -96,48 +98,58 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 }
 
 func (b BlocksSock) WriteBlock(block []byte) {
-	b.blockConns[0].WriteBlock(block)
+	if b.ctrlConn == nil {
+
+		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteCtrlPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localCtrlPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		b.localCtrlAddr = laddr
+		b.remoteCtrlAddr = raddr
+		b.ctrlConn, err = net.ListenUDP("udp", laddr)
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		log.Infof("Dial Ctrl from %s to %s", laddr.String(), raddr.String())
+		fmt.Println(b.ctrlConn)
+
+		b.blockConns[0].ctrlConn = b.ctrlConn
+		b.blockConns[0].remoteCtrlAddr = b.remoteCtrlAddr
+		b.blockConns[0].localCtrlAddr = b.localCtrlAddr
+		b.blockConns[0].WriteBlock(block)
+	}
 }
 
 func (b BlocksSock) ReadBlock(block []byte) {
+	if b.ctrlConn == nil {
+
+		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localCtrlPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+
+		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteCtrlPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+
+		b.localCtrlAddr = laddr
+		b.remoteCtrlAddr = raddr
+
+		ctrlConn, err := net.ListenUDP("udp", laddr)
+		fmt.Printf("Listen Ctrl on %s \n", laddr.String())
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		b.ctrlConn = ctrlConn
+	}
+	b.blockConns[0].ctrlConn = b.ctrlConn
+	b.blockConns[0].remoteCtrlAddr = b.remoteCtrlAddr
+	b.blockConns[0].localCtrlAddr = b.localCtrlAddr
+	fmt.Println(b.blockConns[0].ctrlConn)
 	b.blockConns[0].ReadBlock(block)
-}
-
-func (b BlocksSock) listenCtrl(index int) *net.UDPConn {
-	if b.ctrlConn != nil {
-		return nil
-	}
-	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localCtrlPort))
-	if err != nil {
-		log.Fatal("error:", err)
-	}
-	ctrlConn, err := net.ListenUDP("udp", laddr)
-	fmt.Printf("Listen Ctrl on %s for index %d\n", laddr.String(), index)
-	if err != nil {
-		log.Fatal("error:", err)
-	}
-
-	return ctrlConn
-}
-
-func (b BlocksSock) dialCtrl(index int) *net.UDPConn {
-	if b.ctrlConn != nil {
-		return nil
-	}
-	raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteCtrlPort))
-	if err != nil {
-		log.Fatal("error:", err)
-	}
-	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localCtrlPort))
-	if err != nil {
-		log.Fatal("error:", err)
-	}
-
-	con, err := net.DialUDP("udp", laddr, raddr)
-	if err != nil {
-		log.Fatal("error:", err)
-	}
-	log.Infof("Dial Ctrl from %s to %s", laddr.String(), raddr.String())
-	fmt.Println(con)
-	return con
 }
