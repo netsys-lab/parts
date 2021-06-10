@@ -141,11 +141,11 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 	done <- true
 }
 
-func (b *BlocksConn) WriteBlock(block []byte) {
+func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: Save activeBlockCount and increase immediatly
 	// TODO: Not overwrite if actually sending
 	b.block = block
-
+	b.BlockId = int64(blockId)
 	b.packets = make([][]byte, CeilForce(int64(len(block)), PACKET_SIZE-BLOCKS_HEADER_SIZE))
 	log.Infof("Writing %d packets", len(b.packets))
 	// b.packets[b.activeBlockCount] = make([][]byte, len(block)/PACKET_SIZE)
@@ -166,11 +166,12 @@ func (b *BlocksConn) WriteBlock(block []byte) {
 		if err != nil {
 			log.Fatal("error:", err)
 		}
+		fmt.Printf("Dialed to %s", b.dataConn.RemoteAddr())
 	}
 	fmt.Println(b.ctrlConn)
-	go func(ctrlCon *net.UDPConn, missingNums *[]int64) {
+	/*go func(ctrlCon *net.UDPConn, missingNums *[]int64) {
 		b.collectRetransfers(ctrlCon, missingNums)
-	}(b.ctrlConn, &b.missingSequenceNums)
+	}(b.ctrlConn, &b.missingSequenceNums)*/
 
 	// TODO: Synchronize this
 	b.createPackets()
@@ -180,9 +181,10 @@ func (b *BlocksConn) WriteBlock(block []byte) {
 	time.Sleep(100 * time.Second)
 }
 
-func (b *BlocksConn) ReadBlock(block []byte) {
+func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// TODO: Not overwrite if actually receiving
 	b.block = block
+	b.BlockId = blockId
 	// TODO: This assumption here is bullshit, we need to read block size from first packet of block id
 	// TODO: How to ensure order of parallel sent blocks? Increasing blockIds?
 	b.packets = make([][]byte, CeilForce(int64(len(block)), PACKET_SIZE-BLOCKS_HEADER_SIZE))
@@ -211,10 +213,10 @@ func (b *BlocksConn) ReadBlock(block []byte) {
 	}(b.dataConn)
 	log.Infof("After call of receive %p", b.nextPacketIndex)
 	log.Infof("After call of missingnums %p", &b.missingSequenceNums)
-	go func(ctrlCon *net.UDPConn, missingNums *[]int64) {
+	/*go func(ctrlCon *net.UDPConn, missingNums *[]int64) {
 		log.Infof("In call of retransfers %p", missingNums)
 		b.requestRetransfers(ctrlCon, missingNums)
-	}(b.ctrlConn, &b.missingSequenceNums)
+	}(b.ctrlConn, &b.missingSequenceNums)*/
 
 	b.parsePackets(b.nextPacketIndex, &b.missingSequenceNums)
 }

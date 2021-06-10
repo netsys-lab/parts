@@ -51,11 +51,13 @@ func mainErr() error {
 	file, err := ioutil.ReadFile(flags.InFile)
 	Check(err)
 	buffer := make([]byte, len(file))
-
 	if isServer {
 		blockSock := NewBlocksSock("127.0.0.1", "127.0.0.1", 30000, 40000, 31000, 42000)
+		blockSock.listen()
 		fmt.Println(len(buffer))
 		log.Infof("Before receiving, buffer md5 %x", md5.Sum(buffer))
+		// go blockSock.ReadBlock(buffer[:halfLen])
+		// time.Sleep(10 * time.Millisecond)
 		blockSock.ReadBlock(buffer)
 		/*for i, v := range buffer {
 			if v != file[i] {
@@ -68,6 +70,9 @@ func mainErr() error {
 	} else {
 		fmt.Println(len(buffer))
 		blockSock := NewBlocksSock("127.0.0.1", "127.0.0.1", 40000, 30000, 42000, 31000)
+		blockSock.dial()
+		// go blockSock.WriteBlock(file[:halfLen])
+		// time.Sleep(10 * time.Millisecond)
 		blockSock.WriteBlock(file)
 	}
 
