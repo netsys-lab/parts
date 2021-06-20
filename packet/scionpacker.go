@@ -78,6 +78,8 @@ func (spp *SCIONPacketPacker) Pack(buf *[]byte, payloadStart int) {
 func (spp *SCIONPacketPacker) Unpack(buf *[]byte) (int, error) {
 	scnLen := (*buf)[5]
 	targetOffset := scnLen * 4
+	// SCION UDP HEADER is 8 byte, ignore previos stuff
+	targetOffset += 8
 	*buf = (*buf)[targetOffset:]
 	return len(*buf), nil
 }
