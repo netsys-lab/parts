@@ -1,10 +1,14 @@
 package packet
 
 import (
+	"context"
+	"fmt"
 	"net"
+	"os"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/netsec-ethz/scion-apps/pkg/appnet"
 	"github.com/scionproto/scion/go/lib/addr"
 	"github.com/scionproto/scion/go/lib/common"
 	"github.com/scionproto/scion/go/lib/serrors"
@@ -17,17 +21,41 @@ import (
 )
 
 type SCIONPacketPacker struct {
-	DestAddr  *snet.UDPAddr
-	Path      *snet.Path
-	Header    []byte
-	LocalIA   *addr.IA
-	LocalAddr *net.UDPAddr
+	DstAddrString   string
+	LocalAddrString string
+	DestAddr        *snet.UDPAddr
+	Header          []byte
+	LocalIA         *addr.IA
+	LocalAddr       *net.UDPAddr
 }
 
-func NewSCIONPacketPacker(dst *snet.UDPAddr, path *snet.Path) (*SCIONPacketPacker, error) {
+func (spp *SCIONPacketPacker) SetFirstPath() {
+	snet_udp_addr, err := appnet.ResolveUDPAddr(spp.DstAddrString)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	spp.DestAddr = snet_udp_addr
+	paths, err := appnet.DefNetwork().PathQuerier.Query(context.Background(), snet_udp_addr.IA)
+	for i := range paths {
+		fmt.Println("Path", i, ":", paths[i])
+	}
+	// sel_path, err := appnet.ChoosePathByMetric(appnet.Shortest, snet_udp_addr.IA)
+	// sel_path, err := appnet.ChoosePathInteractive(snet_udp_addr.IA)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	appnet.SetPath(snet_udp_addr, paths[0])
+}
 
-	spp := SCIONPacketPacker{}
+func NewSCIONPacketPacker(dst string) (*SCIONPacketPacker, error) {
+
+	spp := SCIONPacketPacker{
+		DstAddrString: dst,
+	}
 	var err error
+	spp.SetFirstPath()
 	spp.Header, err = spp.getHeaderFromEmptyPacket()
 	if err != nil {
 		return nil, err
