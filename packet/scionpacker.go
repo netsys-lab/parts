@@ -60,15 +60,30 @@ func NewSCIONPacketPacker(dst string) (*SCIONPacketPacker, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("SCION HEADER WITH LEN %d:\n", len(spp.Header))
+	fmt.Println(spp.Header)
+
 	return &spp, nil
 }
 
 func (spp *SCIONPacketPacker) GetHeaderLen() int {
 	return len(spp.Header)
 }
+func (spp *SCIONPacketPacker) Pack(buf *[]byte, payloadStart int) {
+	*buf = append(*buf, spp.Header...)
+}
+
+// This is really dirty, no checks at all
+// But to start with this should be fine
+func (spp *SCIONPacketPacker) Unpack(buf *[]byte) (int, error) {
+	scnLen := (*buf)[5]
+	targetOffset := scnLen * 4
+	*buf = (*buf)[targetOffset:]
+	return len(*buf), nil
+}
 
 // This is the quick and dirty hack for packing SCION packets
-func (spp *SCIONPacketPacker) Pack(buf []byte, payloadStart int) {
+/*func (spp *SCIONPacketPacker) Pack(buf []byte, payloadStart int) {
 	// TODO: Cache Header
 	// off := spp.GetHeaderLen()
 	var (
@@ -106,7 +121,7 @@ func (spp *SCIONPacketPacker) Pack(buf []byte, payloadStart int) {
 
 	pkt.Serialize()
 	copy(buf, pkt.Bytes)
-}
+}*/
 
 func (spp *SCIONPacketPacker) getHeaderFromEmptyPacket() ([]byte, error) {
 	// TODO: Cache Header
@@ -226,7 +241,7 @@ func netAddrToHostAddr(a net.Addr) (addr.HostAddr, error) {
 	}
 }
 
-func (spp *SCIONPacketPacker) Unpack(buf []byte) (int, error) {
+/*func (spp *SCIONPacketPacker) Unpack(buf []byte) (int, error) {
 	payloadStart := 0
 	p := snet.Packet{
 		Bytes: buf,
@@ -294,6 +309,7 @@ func (spp *SCIONPacketPacker) Unpack(buf []byte) (int, error) {
 	}
 	return payloadStart, serrors.New("unhandled SCMP type", "type", scmpLayer.TypeCode, "src", p.Source)
 }
+*/
 
 func hostAddrToNetAddr(a addr.HostAddr) (net.Addr, error) {
 	switch aImpl := a.(type) {

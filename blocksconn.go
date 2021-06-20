@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/martenwallewein/blocks/packet"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,9 +40,14 @@ type BlocksConn struct {
 	processPacketIndex         *int
 	remoteCtrlAddr             *net.UDPAddr
 	localCtrlAddr              *net.UDPAddr
+	packetPacker               *packet.SCIONPacketPacker
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, ctrlConn *net.UDPConn) *BlocksConn {
+	sPacketPacker, err := packet.NewSCIONPacketPacker(remoteAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
 	blocksConn := &BlocksConn{
 		missingSequenceNums: make([]int64, 0),
 		localAddr:           localAddr,
@@ -49,6 +55,7 @@ func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort
 		localStartPort:      localStartPort,
 		remoteStartPort:     remoteStartPort,
 		ctrlConn:            ctrlConn,
+		packetPacker:        sPacketPacker,
 	}
 	val := 0
 	val2 := 0
@@ -64,10 +71,10 @@ func (b *BlocksConn) createPackets() {
 	sequenceNumber := 1
 	pIndex := 0
 	bt := make([]byte, 8)
-
+	scionHeaderLen := b.packetPacker.GetHeaderLen()
 	for start < end {
 		buf := make([]byte, 0)
-		next := PACKET_SIZE - BLOCKS_HEADER_SIZE
+		next := PACKET_SIZE - BLOCKS_HEADER_SIZE - scionHeaderLen
 		// Will write to network.
 		// var network bytes.Buffer        // Stand-in for a network connection
 		// enc := gob.NewEncoder(&network) // Will write to network.
@@ -78,6 +85,7 @@ func (b *BlocksConn) createPackets() {
 			BlockSize:      0, // int64(end), TODO: Changes header size
 			Payload:        b.block[start:min],
 		}*/
+		b.packetPacker.Pack(&buf, 0)
 		binary.BigEndian.PutUint64(bt, uint64(sequenceNumber))
 		buf = append(buf, bt...)
 		// fmt.Println(buf)
@@ -146,12 +154,12 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: Not overwrite if actually sending
 	b.block = block
 	b.BlockId = int64(blockId)
-	b.packets = make([][]byte, CeilForce(int64(len(block)), PACKET_SIZE-BLOCKS_HEADER_SIZE))
+	scionHeaderLen := b.packetPacker.GetHeaderLen()
+	b.packets = make([][]byte, CeilForce(int64(len(block)), int64(PACKET_SIZE-BLOCKS_HEADER_SIZE-scionHeaderLen)))
 	log.Infof("Writing %d packets", len(b.packets))
 	// b.packets[b.activeBlockCount] = make([][]byte, len(block)/PACKET_SIZE)
 	// TODO: Waiting queue
 	// TODO: sync write calls
-	// TODO: Resend packets
 	b.mode = MODE_SENDING
 	if b.dataConn == nil {
 		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
@@ -187,7 +195,8 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	b.BlockId = blockId
 	// TODO: This assumption here is bullshit, we need to read block size from first packet of block id
 	// TODO: How to ensure order of parallel sent blocks? Increasing blockIds?
-	b.packets = make([][]byte, CeilForce(int64(len(block)), PACKET_SIZE-BLOCKS_HEADER_SIZE))
+	scionHeaderLen := b.packetPacker.GetHeaderLen()
+	b.packets = make([][]byte, CeilForce(int64(len(block)), int64(PACKET_SIZE-BLOCKS_HEADER_SIZE-scionHeaderLen)))
 	*b.nextPacketIndex = 0
 	*b.processPacketIndex = 0
 	log.Infof("Receiving %d packets", len(b.packets))
@@ -320,6 +329,7 @@ func (b *BlocksConn) parsePackets(nextPacketIndex *int, missingNums *[]int64) {
 		// log.Infof("Received md5 %x", md5.Sum(b.packets[*b.processPacketIndex]))
 		// err := decodePacket(&p, b.packets[*b.processPacketIndex])
 		buf := b.packets[*b.processPacketIndex]
+		b.packetPacker.Unpack(&buf)
 		p.SequenceNumber = (int64(binary.BigEndian.Uint64(buf[0:8])))
 		p.BlockId = (int64(binary.BigEndian.Uint64(buf[8:16])))
 		p.Payload = buf[16:]
