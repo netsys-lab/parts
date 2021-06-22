@@ -50,7 +50,7 @@ func (spp *SCIONPacketPacker) SetFirstPath() {
 	appnet.SetPath(snet_udp_addr, paths[0])
 }
 
-func NewSCIONPacketPacker(dst string, localAddr string) (*SCIONPacketPacker, error) {
+func NewSCIONPacketPacker(dst string, localAddr string, dstPort int) (*SCIONPacketPacker, error) {
 
 	spp := SCIONPacketPacker{
 		DstAddrString:   dst,
@@ -67,6 +67,9 @@ func NewSCIONPacketPacker(dst string, localAddr string) (*SCIONPacketPacker, err
 	}
 	spp.LocalIA = &lAddr.IA
 	spp.SetFirstPath()
+	spp.DestAddr.Host.Port = dstPort
+	fmt.Println(spp.DestAddr)
+
 	spp.Header, err = spp.getHeaderFromEmptyPacket(make([]byte, 0))
 	fmt.Printf("Get Payload size %d\n", binary.BigEndian.Uint16(spp.Header[6:8]))
 	if err != nil {
@@ -159,7 +162,8 @@ func (spp *SCIONPacketPacker) getHeaderFromEmptyPacket(pl []byte) ([]byte, error
 			Zone: spp.DestAddr.Host.Zone,
 		}
 	}
-
+	fmt.Println(dst)
+	fmt.Println(port)
 	p := &snet.Packet{
 		Bytes: make([]byte, 1400),
 		PacketInfo: snet.PacketInfo{

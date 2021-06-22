@@ -44,7 +44,7 @@ type BlocksConn struct {
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, ctrlConn *net.UDPConn) *BlocksConn {
-	sPacketPacker, err := packet.NewSCIONPacketPacker(remoteAddr, localAddr)
+	sPacketPacker, err := packet.NewSCIONPacketPacker(remoteAddr, localAddr, remoteStartPort)
 	if err != nil {
 		log.Fatal(err)
 	}
