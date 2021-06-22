@@ -44,7 +44,7 @@ type BlocksConn struct {
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, ctrlConn *net.UDPConn) *BlocksConn {
-	sPacketPacker, err := packet.NewSCIONPacketPacker(remoteAddr)
+	sPacketPacker, err := packet.NewSCIONPacketPacker(remoteAddr, localAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func (b *BlocksConn) createPackets() {
 			BlockSize:      0, // int64(end), TODO: Changes header size
 			Payload:        b.block[start:min],
 		}*/
-		b.packetPacker.Pack(&buf, 0)
+		b.packetPacker.Pack(&buf, 0, uint16(min-start+BLOCKS_HEADER_SIZE+8))
 		binary.BigEndian.PutUint64(bt, uint64(sequenceNumber))
 		buf = append(buf, bt...)
 		// fmt.Println(buf)
@@ -162,15 +162,24 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: sync write calls
 	b.mode = MODE_SENDING
 	if b.dataConn == nil {
-		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
+		/*raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
 		if err != nil {
 			log.Fatal("error:", err)
 		}
 		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
 		if err != nil {
 			log.Fatal("error:", err)
+		}*/
+		dstUpdAdr := &net.UDPAddr{
+			IP:   b.packetPacker.DestAddr.NextHop.IP,
+			Port: b.packetPacker.DestAddr.NextHop.Port,
 		}
-		b.dataConn, err = net.DialUDP("udp", laddr, raddr)
+		updAdr := &net.UDPAddr{
+			IP:   b.packetPacker.LocalAddr.IP,
+			Port: b.localStartPort,
+		}
+		var err error
+		b.dataConn, err = net.DialUDP("udp", updAdr, dstUpdAdr)
 		if err != nil {
 			log.Fatal("error:", err)
 		}
@@ -204,15 +213,20 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// TODO: sync write calls
 	// TODO: Can not put this into struct for whatever reason
 	if b.dataConn == nil {
-		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+		/*laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}*/
+		updAdr := &net.UDPAddr{
+			IP:   b.packetPacker.LocalAddr.IP,
+			Port: b.localStartPort,
+		}
+		var err error
+		b.dataConn, err = net.ListenUDP("udp", updAdr)
 		if err != nil {
 			log.Fatal("error:", err)
 		}
-		b.dataConn, err = net.ListenUDP("udp", laddr)
-		if err != nil {
-			log.Fatal("error:", err)
-		}
-		fmt.Printf("Listen on %s\n", laddr.String())
+		fmt.Printf("Listen on %s\n", updAdr.String())
 	}
 
 	log.Infof("Before call of receive %p", b.nextPacketIndex)

@@ -2,6 +2,7 @@ package packet
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
@@ -49,14 +50,25 @@ func (spp *SCIONPacketPacker) SetFirstPath() {
 	appnet.SetPath(snet_udp_addr, paths[0])
 }
 
-func NewSCIONPacketPacker(dst string) (*SCIONPacketPacker, error) {
+func NewSCIONPacketPacker(dst string, localAddr string) (*SCIONPacketPacker, error) {
 
 	spp := SCIONPacketPacker{
-		DstAddrString: dst,
+		DstAddrString:   dst,
+		LocalAddrString: localAddr,
 	}
 	var err error
+	lAddr, err := appnet.ResolveUDPAddr(localAddr)
+	if err != nil {
+		return nil, err
+	}
+	spp.LocalAddr = &net.UDPAddr{
+		IP:   lAddr.Host.IP,
+		Port: lAddr.Host.Port,
+	}
+	spp.LocalIA = &lAddr.IA
 	spp.SetFirstPath()
-	spp.Header, err = spp.getHeaderFromEmptyPacket()
+	spp.Header, err = spp.getHeaderFromEmptyPacket(make([]byte, 0))
+	fmt.Printf("Get Payload size %d\n", binary.BigEndian.Uint16(spp.Header[6:8]))
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +81,10 @@ func NewSCIONPacketPacker(dst string) (*SCIONPacketPacker, error) {
 func (spp *SCIONPacketPacker) GetHeaderLen() int {
 	return len(spp.Header)
 }
-func (spp *SCIONPacketPacker) Pack(buf *[]byte, payloadStart int) {
+func (spp *SCIONPacketPacker) Pack(buf *[]byte, payloadStart int, payloadLen uint16) {
 	*buf = append(*buf, spp.Header...)
+	binary.BigEndian.PutUint16((*buf)[6:8], payloadLen)
+	// fmt.Printf("Having payloadLen %d\n", payloadLen)
 }
 
 // This is really dirty, no checks at all
@@ -125,7 +139,7 @@ func (spp *SCIONPacketPacker) Unpack(buf *[]byte) (int, error) {
 	copy(buf, pkt.Bytes)
 }*/
 
-func (spp *SCIONPacketPacker) getHeaderFromEmptyPacket() ([]byte, error) {
+func (spp *SCIONPacketPacker) getHeaderFromEmptyPacket(pl []byte) ([]byte, error) {
 	// TODO: Cache Header
 	// off := spp.GetHeaderLen()
 	var (
@@ -147,7 +161,7 @@ func (spp *SCIONPacketPacker) getHeaderFromEmptyPacket() ([]byte, error) {
 	}
 
 	p := &snet.Packet{
-		Bytes: make([]byte, 9000),
+		Bytes: make([]byte, 1400),
 		PacketInfo: snet.PacketInfo{
 			Destination: dst,
 			Source: snet.SCIONAddress{IA: *spp.LocalIA,
@@ -156,7 +170,7 @@ func (spp *SCIONPacketPacker) getHeaderFromEmptyPacket() ([]byte, error) {
 			Payload: snet.UDPPayload{
 				SrcPort: uint16(spp.LocalAddr.Port),
 				DstPort: uint16(port),
-				Payload: []byte{},
+				Payload: pl,
 			},
 		},
 	}

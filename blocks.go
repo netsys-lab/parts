@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	NUM_BUFS           = 2
+	NUM_BUFS           = 1
 	NUM_ACTIVE_BLOCKS  = 1
 	BUF_SIZE           = 1024 * 1024
-	PACKET_SIZE        = 1500
+	PACKET_SIZE        = 1400
 	BLOCKS_HEADER_SIZE = 16 // 95 // TODO: Fix this magic number
 	MODE_SENDING       = 0
 	MODE_RETRANSFER    = 1
@@ -86,7 +86,7 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 }
 
 func (b *BlocksSock) dial() {
-	if b.ctrlConn == nil {
+	/*if b.ctrlConn == nil {
 
 		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteCtrlPort))
 		if err != nil {
@@ -112,11 +112,11 @@ func (b *BlocksSock) dial() {
 		}
 
 		go b.collectRetransfers()
-	}
+	}*/
 }
 
 func (b *BlocksSock) listen() {
-	if b.ctrlConn == nil {
+	/*if b.ctrlConn == nil {
 
 		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localCtrlPort))
 		if err != nil {
@@ -145,31 +145,33 @@ func (b *BlocksSock) listen() {
 
 		go b.requestRetransfers()
 
-	}
+	}*/
 }
 
 func (b *BlocksSock) WriteBlock(block []byte) {
-	halfLen := len(block) / 2
+	halfLen := len(block) / 1
 	// TODO: Ensure waiting
-	go func(index int) {
-		fmt.Printf("WriteBlock for index %d\n", index%NUM_BUFS)
-		b.blockConns[index%NUM_BUFS].WriteBlock(block[halfLen:], int64(index+1)) // BlockIds positive
-	}(b.aciveBlockIndex)
-	b.aciveBlockIndex++
+	//go func(index int) {
+	//	fmt.Printf("WriteBlock for index %d\n", index%NUM_BUFS)
+	//		b.blockConns[index%NUM_BUFS].WriteBlock(block[halfLen:], int64(index+1)) // BlockIds positive
+	//	}(b.aciveBlockIndex)
+	//	b.aciveBlockIndex++
 	fmt.Printf("WriteBlock for inde2x %d\n", b.aciveBlockIndex%NUM_BUFS)
 	b.blockConns[b.aciveBlockIndex%NUM_BUFS].WriteBlock(block[:halfLen], int64(b.aciveBlockIndex+1)) // BlockIds positive
+	b.aciveBlockIndex++
 }
 
 func (b *BlocksSock) ReadBlock(block []byte) {
-	halfLen := len(block) / 2
+	halfLen := len(block) / 1
 	// TODO: Ensure waiting
-	go func(index int) {
-		fmt.Printf("ReadBlock for index %d\n", index%NUM_BUFS)
-		b.blockConns[index%NUM_BUFS].ReadBlock(block[halfLen:], int64(index+1)) // BlockIds positive
-	}(b.aciveBlockIndex)
-	b.aciveBlockIndex++
+	//go func(index int) {
+	//	fmt.Printf("ReadBlock for index %d\n", index%NUM_BUFS)
+	//		b.blockConns[index%NUM_BUFS].ReadBlock(block[halfLen:], int64(index+1)) // BlockIds positive
+	//	}(b.aciveBlockIndex)
+
 	fmt.Printf("ReadBlock for inde2x %d\n", b.aciveBlockIndex%NUM_BUFS)
 	b.blockConns[b.aciveBlockIndex%NUM_BUFS].ReadBlock(block[:halfLen], int64(b.aciveBlockIndex+1)) // BlockIds positive
+	b.aciveBlockIndex++
 
 }
 
