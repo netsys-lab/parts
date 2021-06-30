@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/martenwallewein/blocks/blockmetrics"
 	"github.com/martenwallewein/blocks/packet"
 	log "github.com/sirupsen/logrus"
 )
@@ -27,13 +28,6 @@ type BlocksConn struct {
 	dataConn                   *net.UDPConn
 	ctrlConn                   *net.UDPConn
 	mode                       int
-	receivedBytes              int64
-	lastReceivedBytes          int64
-	sentBytes                  int64
-	lastSentBytes              int64
-	receivedPackets            int64
-	processedPackets           int64
-	sentPacets                 int64
 	BlockId                    int64
 	lastReceivedSequenceNumber int64
 	nextPacketIndex            *int
@@ -41,6 +35,7 @@ type BlocksConn struct {
 	remoteCtrlAddr             *net.UDPAddr
 	localCtrlAddr              *net.UDPAddr
 	packetPacker               *packet.SCIONPacketPacker
+	Metrics                    blockmetrics.SocketMetrics
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, ctrlConn *net.UDPConn) *BlocksConn {
@@ -112,7 +107,7 @@ func (b *BlocksConn) createPackets() {
 func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
-	go func() {
+	/*go func() {
 		for {
 			select {
 			case <-done:
@@ -123,7 +118,7 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 				b.lastReceivedBytes = b.receivedBytes
 			}
 		}
-	}()
+	}()*/
 	log.Infof("Entering retransfer")
 	for b.mode == MODE_RETRANSFER {
 		for _, v := range *missingNums {
@@ -133,8 +128,8 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 			packet := b.packets[v-1]
 			// log.Infof("Sending back %d", v-1)
 			bts, err := (*b.dataConn).Write(packet)
-			b.receivedBytes += int64(bts)
-			b.receivedPackets++
+			b.Metrics.TxBytes += uint64(bts)
+			b.Metrics.TxPackets += 1
 			// time.Sleep(1 * time.Microsecond)
 			if err != nil {
 				log.Fatal("error:", err)
@@ -251,7 +246,7 @@ func (b *BlocksConn) receivePackets(conn *net.UDPConn, nextPacketIndex *int) {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
 	lastNextPacketIndex := *nextPacketIndex
-	go func() {
+	/*go func() {
 		for {
 			select {
 			case <-done:
@@ -262,7 +257,7 @@ func (b *BlocksConn) receivePackets(conn *net.UDPConn, nextPacketIndex *int) {
 				b.lastReceivedBytes = b.receivedBytes
 			}
 		}
-	}()
+	}()*/
 	for i := range b.packets {
 		b.packets[i] = make([]byte, PACKET_SIZE+100)
 	}
@@ -279,13 +274,9 @@ func (b *BlocksConn) receivePackets(conn *net.UDPConn, nextPacketIndex *int) {
 		if err != nil {
 			log.Fatal("error:", err)
 		}
-		if j%100000 == 0 {
-			j++
-			continue
-		}
 
-		b.receivedBytes += int64(bts)
-		b.receivedPackets++
+		b.Metrics.RxBytes += uint64(bts)
+		b.Metrics.RxPackets += 1
 		lastNextPacketIndex++
 		*b.nextPacketIndex++
 		j++
@@ -318,7 +309,7 @@ func (b *BlocksConn) parsePackets(nextPacketIndex *int, missingNums *[]int64) {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	d := make(chan bool)
 	startTime := time.Now()
-	go func() {
+	/*go func() {
 		for {
 			select {
 			case <-d:
@@ -327,7 +318,7 @@ func (b *BlocksConn) parsePackets(nextPacketIndex *int, missingNums *[]int64) {
 				log.Infof("having %d parsed packets", b.processedPackets)
 			}
 		}
-	}()
+	}()*/
 	fmt.Println(byteLen)
 	p := BlockPacket{}
 	log.Infof("MissingSequenceNums Addr %p", missingNums)
@@ -403,7 +394,7 @@ func (b *BlocksConn) parsePackets(nextPacketIndex *int, missingNums *[]int64) {
 
 		b.lastReceivedSequenceNumber = highestSequenceNumber
 		*b.processPacketIndex++
-		b.processedPackets++
+		// b.processedPackets++
 		receivedPackets++
 		if done {
 			b.mode = MODE_DONE
@@ -433,7 +424,7 @@ func (b *BlocksConn) parsePackets(nextPacketIndex *int, missingNums *[]int64) {
 func (b *BlocksConn) sendPackets(conn *net.UDPConn) {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
-	go func() {
+	/*go func() {
 		for {
 			select {
 			case <-done:
@@ -444,13 +435,13 @@ func (b *BlocksConn) sendPackets(conn *net.UDPConn) {
 				b.lastSentBytes = b.sentBytes
 			}
 		}
-	}()
+	}()*/
 
 	for i := range b.packets {
 		// log.Infof("Sending md5 %x", md5.Sum(b.packets[index][i]))
 		bts, err := conn.Write(b.packets[i])
-		b.sentPacets += int64(bts)
-		b.sentBytes++
+		b.Metrics.TxBytes += uint64(bts)
+		b.Metrics.TxPackets += 1
 		// time.Sleep(1 * time.Microsecond)
 		if err != nil {
 			log.Fatal("error:", err)

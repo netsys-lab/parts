@@ -1,4 +1,4 @@
-package metrics
+package blockmetrics
 
 import (
 	"time"
@@ -46,10 +46,31 @@ type Metrics struct {
 
 func NewMetrics(timeInterval, numSockets int, getMetricFunc GetMetricFunc) *Metrics {
 	m := Metrics{
-		timeInterval:  timeInterval,
-		getMetricFunc: getMetricFunc,
-		signalChan:    make(chan bool),
-		numSockets:    numSockets,
+		timeInterval:                 timeInterval,
+		getMetricFunc:                getMetricFunc,
+		signalChan:                   make(chan bool),
+		numSockets:                   numSockets,
+		RxBytesPerSocket:             make([]uint64, numSockets),
+		TxBytesPerSocket:             make([]uint64, numSockets),
+		RxBandwidthPerSocket:         make([]uint64, numSockets),
+		TxBandwidthPerSocket:         make([]uint64, numSockets),
+		RxPacketsPerSocket:           make([]uint64, numSockets),
+		TxPacketsPerSocket:           make([]uint64, numSockets),
+		RxBytesPerSocketOverTime:     make([][]uint64, numSockets),
+		TxBytesPerSocketOverTime:     make([][]uint64, numSockets),
+		RxBandwidthPerSocketOverTime: make([][]uint64, numSockets),
+		TxBandwidthPerSocketOverTime: make([][]uint64, numSockets),
+		RxPacketsPerSocketOverTime:   make([][]uint64, numSockets),
+		TxPacketsPerSocketOverTime:   make([][]uint64, numSockets),
+	}
+
+	for i := 0; i < numSockets; i++ {
+		m.RxBytesPerSocketOverTime[i] = make([]uint64, numSockets)
+		m.TxBytesPerSocketOverTime[i] = make([]uint64, numSockets)
+		m.RxBandwidthPerSocketOverTime[i] = make([]uint64, numSockets)
+		m.TxBandwidthPerSocketOverTime[i] = make([]uint64, numSockets)
+		m.RxPacketsPerSocketOverTime[i] = make([]uint64, numSockets)
+		m.TxPacketsPerSocketOverTime[i] = make([]uint64, numSockets)
 	}
 	return &m
 }
@@ -100,6 +121,12 @@ func (m *Metrics) Collect() {
 				m.TxBytes += cTxBytes
 				m.RxPackets += cRxPackets
 				m.TxPackets += cTxPackets
+
+				m.RxPacketsOverTime = append(m.RxPacketsOverTime, m.RxPackets)
+				m.TxPacketsOverTime = append(m.TxPacketsOverTime, m.TxPackets)
+
+				m.RxBytesOverTime = append(m.RxBytesOverTime, m.RxBytes)
+				m.TxBytesOverTime = append(m.TxBytesOverTime, m.TxBytes)
 			}
 		}
 	}()

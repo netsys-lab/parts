@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/martenwallewein/blocks/blockmetrics"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -47,20 +48,14 @@ type BlocksSock struct {
 	localCtrlPort    int
 	remoteCtrlPort   int
 
-	udpCons           []net.Conn
-	ctrlConn          *net.UDPConn
-	modes             []int
-	receivedBytes     int64
-	lastReceivedBytes int64
-	sentBytes         int64
-	lastSentBytes     int64
-	receivedPackets   int64
-	processedPackets  int64
-	sentPacets        int64
-	blockConns        []*BlocksConn
-	remoteCtrlAddr    *net.UDPAddr
-	localCtrlAddr     *net.UDPAddr
-	aciveBlockIndex   int
+	udpCons         []net.Conn
+	ctrlConn        *net.UDPConn
+	modes           []int
+	blockConns      []*BlocksConn
+	remoteCtrlAddr  *net.UDPAddr
+	localCtrlAddr   *net.UDPAddr
+	aciveBlockIndex int
+	Metrics         *blockmetrics.Metrics
 }
 
 func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int) *BlocksSock {
@@ -79,6 +74,15 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 	for i := range blockSock.modes {
 		blockSock.blockConns = append(blockSock.blockConns, NewBlocksConn(localAddr, remoteAddr, localStartPort+i, remoteStartPort+i, nil))
 	}
+
+	blockSock.Metrics = blockmetrics.NewMetrics(1000, NUM_BUFS, func(index int) (uint64, uint64, uint64, uint64) {
+		rxBytes := blockSock.blockConns[index].Metrics.RxBytes
+		txBytes := blockSock.blockConns[index].Metrics.TxBytes
+		rxPackets := blockSock.blockConns[index].Metrics.RxPackets
+		txPackets := blockSock.blockConns[index].Metrics.TxPackets
+
+		return rxBytes, txBytes, rxPackets, txPackets
+	})
 
 	// gob.Register(BlockPacket{})
 
