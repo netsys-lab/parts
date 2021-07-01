@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/martenwallewein/blocks/blockmetrics"
+	"github.com/martenwallewein/blocks/control"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -45,17 +46,13 @@ type BlocksSock struct {
 	remoteAddr       string
 	localStartPort   int
 	remoteStartPort  int
-	localCtrlPort    int
-	remoteCtrlPort   int
-
-	udpCons         []net.Conn
-	ctrlConn        *net.UDPConn
-	modes           []int
-	blockConns      []*BlocksConn
-	remoteCtrlAddr  *net.UDPAddr
-	localCtrlAddr   *net.UDPAddr
-	aciveBlockIndex int
-	Metrics         *blockmetrics.Metrics
+	udpCons          []net.Conn
+	ctrlConn         *net.UDPConn
+	modes            []int
+	blockConns       []*BlocksConn
+	controlPlane     *control.ControlPlane
+	aciveBlockIndex  int
+	Metrics          *blockmetrics.Metrics
 }
 
 func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int) *BlocksSock {
@@ -64,12 +61,12 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 		remoteAddr:      remoteAddr,
 		localStartPort:  localStartPort,
 		remoteStartPort: remoteStartPort,
-		localCtrlPort:   localCtrlPort,
-		remoteCtrlPort:  remoteCtrlPort,
 		modes:           make([]int, NUM_BUFS),
 		blockConns:      make([]*BlocksConn, 0),
 		aciveBlockIndex: 0,
 	}
+
+	blockSock.controlPlane = control.NewControlPlane(localCtrlPort, remoteCtrlPort)
 
 	for i := range blockSock.modes {
 		blockSock.blockConns = append(blockSock.blockConns, NewBlocksConn(localAddr, remoteAddr, localStartPort+i, remoteStartPort+i, nil))

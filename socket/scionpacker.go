@@ -1,4 +1,4 @@
-package packet
+package socket
 
 import (
 	"context"
@@ -20,6 +20,12 @@ import (
 	"github.com/scionproto/scion/go/lib/spath"
 	"github.com/scionproto/scion/go/lib/topology/underlay"
 )
+
+type PacketPacker interface {
+	GetHeaderLen() int
+	Pack([]byte) error
+	Unpack([]byte) error
+}
 
 type SCIONPacketPacker struct {
 	DstAddrString   string
