@@ -201,8 +201,12 @@ type UDPPacketPacker struct {
 type BinaryBlocksPacketPacker struct {
 }
 
+func NewBinaryBlocksPacketPacker() BlocksPacketPacker {
+	return &BinaryBlocksPacketPacker{}
+}
+
 func (bp *BinaryBlocksPacketPacker) GetHeaderLen() int {
-	return 0
+	return 16
 }
 
 func (bp *BinaryBlocksPacketPacker) Pack(buf *[]byte, blockContext *BlockContext) error {
@@ -217,4 +221,19 @@ func (bp *BinaryBlocksPacketPacker) Unpack(buf *[]byte, blockContext *BlockConte
 	p.BlockId = (int64(binary.BigEndian.Uint64((*buf)[0:8])))
 	*buf = (*buf)[blockContext.BlocksPacketPacker.GetHeaderLen():]
 	return &p, nil
+}
+
+func NewUDPTransportPacketPacker() TransportPacketPacker {
+	return &UDPPacketPacker{}
+}
+
+func (up *UDPPacketPacker) GetHeaderLen() int {
+	return 0
+}
+
+func (up *UDPPacketPacker) Pack(buf *[]byte, payloadLen int) error {
+	return nil
+}
+func (up *UDPPacketPacker) Unpack(buf *[]byte) error {
+	return nil
 }

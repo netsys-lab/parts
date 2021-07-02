@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -83,9 +84,18 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: Save activeBlockCount and increase immediatly
 	// TODO: Not overwrite if actually sending
-	blockContext := socket.BlockContext{}
-	blockContext.Data = block
+	blockContext := socket.BlockContext{
+		BlocksPacketPacker:    socket.NewBinaryBlocksPacketPacker(),
+		TransportPacketPacker: socket.NewUDPTransportPacketPacker(),
+		MaxPacketLength:       PACKET_SIZE,
+		BlockId:               blockId,
+		Data:                  block,
+	}
+
 	blockContext.Prepare()
+	b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
+
 	log.Infof("Writing %d packets", blockContext.NumPackets)
 	// b.packets[b.activeBlockCount] = make([][]byte, len(block)/PACKET_SIZE)
 	// TODO: Waiting queue
@@ -101,8 +111,16 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// TODO: Not overwrite if actually receiving
 	b.block = block
 	b.BlockId = blockId
-	blockContext := socket.BlockContext{}
+	blockContext := socket.BlockContext{
+		BlocksPacketPacker:    socket.NewBinaryBlocksPacketPacker(),
+		TransportPacketPacker: socket.NewUDPTransportPacketPacker(),
+		MaxPacketLength:       PACKET_SIZE,
+		BlockId:               blockId,
+		Data:                  block,
+	}
 	blockContext.Prepare()
+	b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
 	// TODO: This assumption here is bullshit, we need to read block size from first packet of block id
 	// TODO: How to ensure order of parallel sent blocks? Increasing blockIds?
 	log.Infof("Receiving %d packets", blockContext.NumPackets)
