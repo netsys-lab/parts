@@ -25,9 +25,19 @@ type BlockContext struct {
 	RecommendedBufferSize int
 	HeaderLength          int
 	Data                  []byte
+	highestSequenceNumber int64
+	missingNums           []int64
+	currentSequenceNumber int64
+	BlockId               int64
+}
+
+func (b *BlockContext) GetNextSequenceNumber() int64 {
+	b.currentSequenceNumber++
+	return b.currentSequenceNumber
 }
 
 func (b *BlockContext) Prepare() {
+	b.missingNums = make([]int64, 0)
 	b.NumPackets = utils.CeilForceInt(len(b.Data), b.MaxPacketLength)
 	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.BlocksPacketPacker.GetHeaderLen()
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
@@ -42,6 +52,28 @@ func (b *BlockContext) SerializePacket(packetBuffer *[]byte) {
 func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 	b.TransportPacketPacker.Unpack(packetBuffer)
 	p, _ := b.BlocksPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
+	diff := p.SequenceNumber - b.highestSequenceNumber
+	if diff > 1 {
+		var off int64 = 1
+		for off < diff {
+			// log.Infof("Append %d", p.SequenceNumber-off)
+			b.Lock()
+			b.missingNums = utils.AppendIfMissing(b.missingNums, p.SequenceNumber-off)
+			b.Unlock()
+			off++
+		}
+		// log.Infof("Appending missing sequence number %d to %d for highest number %d", p.SequenceNumber-off, p.SequenceNumber, highestSequenceNumber)
+	} else if diff < 0 {
+		// retransfer = true
+		// log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
+		b.Lock()
+		b.missingNums = utils.RemoveFromSlice(b.missingNums, p.SequenceNumber)
+		b.Unlock()
+
+	}
+	if diff > 0 {
+		b.highestSequenceNumber += diff
+	}
 }
 
 type SocketOptions struct {
@@ -176,7 +208,7 @@ func (bp *BinaryBlocksPacketPacker) GetHeaderLen() int {
 func (bp *BinaryBlocksPacketPacker) Pack(buf *[]byte, blockContext *BlockContext) error {
 	sequenceNumber := blockContext.GetNextSequenceNumber()
 	binary.BigEndian.PutUint64((*buf)[8:16], uint64(sequenceNumber))
-	binary.BigEndian.PutUint64((*buf)[0:8], uint64(b.BlockId))
+	binary.BigEndian.PutUint64((*buf)[0:8], uint64(blockContext.BlockId))
 	return nil
 }
 func (bp *BinaryBlocksPacketPacker) Unpack(buf *[]byte, blockContext *BlockContext) (*BlockPacket, error) {
