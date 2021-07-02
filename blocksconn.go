@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/martenwallewein/blocks/blockmetrics"
+	"github.com/martenwallewein/blocks/control"
 	"github.com/martenwallewein/blocks/socket"
+	"github.com/martenwallewein/blocks/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -25,9 +29,11 @@ type BlocksConn struct {
 	mode                       int
 	Metrics                    blockmetrics.SocketMetrics
 	TransportSocket            socket.TransportSocket
+	ControlPlane               *control.ControlPlane
+	blockContext               *socket.BlockContext
 }
 
-func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, ctrlConn *net.UDPConn) *BlocksConn {
+func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, controlPlane *control.ControlPlane) *BlocksConn {
 
 	blocksConn := &BlocksConn{
 		missingSequenceNums: make([]int64, 0),
@@ -35,6 +41,7 @@ func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort
 		remoteAddr:          remoteAddr,
 		localStartPort:      localStartPort,
 		remoteStartPort:     remoteStartPort,
+		ControlPlane:        controlPlane,
 	}
 
 	blocksConn.TransportSocket = socket.NewUDPTransportSocket()
@@ -43,20 +50,6 @@ func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort
 }
 
 func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
-	/*ticker := time.NewTicker(1000 * time.Millisecond)
-	done := make(chan bool)
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				bandwidth := (b.receivedBytes - b.lastReceivedBytes) * 8 / 1024 / 1024
-				log.Infof("Retransfer with %d Mbit/s having %d received packets", bandwidth, b.receivedPackets)
-				b.lastReceivedBytes = b.receivedBytes
-			}
-		}
-	}()
 	log.Infof("Entering retransfer")
 	for b.mode == MODE_RETRANSFER {
 		for _, v := range *missingNums {
@@ -66,7 +59,11 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 			// packet := b.packets[v-1]
 			// log.Infof("Sending back %d", v-1)
 			// TODO: How to get packet here, or at least payload
-			bts, err := (*&b.TransportSocket).Write([]byte{})
+			packet := b.blockContext.GetPayloadByPacketIndex(int(v))
+			buf := make([]byte, len(packet)+b.blockContext.HeaderLength)
+			copy(buf[b.blockContext.HeaderLength:], packet)
+			b.blockContext.SerializePacket(&buf)
+			bts, err := (b.TransportSocket).Write(buf)
 			b.Metrics.TxBytes += uint64(bts)
 			b.Metrics.TxPackets += 1
 			// time.Sleep(1 * time.Microsecond)
@@ -74,11 +71,11 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 				log.Fatal("error:", err)
 			}
 		}
-		b.Lock()
-		*missingNums = make([]int64, 0)
-		b.Unlock()
+		b.blockContext.Lock()
+		b.blockContext.MissingSequenceNums = make([]int64, 0)
+		b.blockContext.Unlock()
 		time.Sleep(10 * time.Microsecond)
-	}*/
+	}
 }
 
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
@@ -92,7 +89,7 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 		Data:                  block,
 		OnBlockStatusChange:   func(numMsg int, bytes int) {},
 	}
-
+	b.blockContext = &blockContext
 	blockContext.Prepare()
 	b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
 	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
@@ -122,6 +119,7 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 		Data:                  block,
 		OnBlockStatusChange:   func(numMsg int, bytes int) {},
 	}
+	b.blockContext = &blockContext
 	blockContext.Prepare()
 	err := b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
 	if err != nil {
@@ -146,9 +144,10 @@ func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 	/*go func() {
 		b.retransferMissingPackets()
 	}()
+	*/
 	for {
 		buf := make([]byte, PACKET_SIZE+100)
-		bts, err := (*b.ctrlConn).Read(buf)
+		bts, err := b.ControlPlane.Read(buf)
 		if err != nil {
 			log.Fatal("error:", err)
 		}
@@ -165,18 +164,18 @@ func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 		// TODO: Add to retransfers
 		for _, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
-			b.Lock()
-			*missingNums = utils.AppendIfMissing(*missingNums, v)
-			b.Unlock()
+			b.blockContext.Lock()
+			b.blockContext.MissingSequenceNums = utils.AppendIfMissing(b.blockContext.MissingSequenceNums, v)
+			b.blockContext.Unlock()
 		}
 		// b.missingSequenceNums[index] = append(b.missingSequenceNums[index], p.MissingSequenceNumbers...)
 		// log.Infof("Added %d sequenceNumbers to missingSequenceNumbers", len(p.MissingSequenceNumbers))
-	}*/
+	}
 
 }
 
 func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
-	/*ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
 	log.Infof("In Call of requestRetransfers %p", missingNums)
 	go func(missingNums *[]int64) {
@@ -198,7 +197,7 @@ func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 					var network bytes.Buffer        // Stand-in for a network connection
 					enc := gob.NewEncoder(&network) // Will write to network.
 					p := socket.BlockRequestPacket{
-						LastSequenceNumber:     b.lastReceivedSequenceNumber,
+						LastSequenceNumber:     b.blockContext.HighestSequenceNumber,
 						BlockId:                b.BlockId,
 						MissingSequenceNumbers: (*missingNums)[start:min],
 					}
@@ -210,8 +209,7 @@ func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 					//for _, v := range p.MissingSequenceNumbers {
 					// log.Infof("Sending missing SequenceNums %v", v)
 					//}
-
-					_, err = (*ctrlCon).WriteTo(network.Bytes(), b.remoteCtrlAddr)
+					_, err = b.ControlPlane.Write(network.Bytes())
 					if err != nil {
 						log.Fatal("Write error:", err)
 					}
@@ -222,6 +220,12 @@ func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 
 			}
 		}
-	}(missingNums)
-	*/
+	}(&b.blockContext.MissingSequenceNums)
+
+}
+
+func decodeReqPacket(p *socket.BlockRequestPacket, buf []byte) error {
+	network := bytes.NewBuffer(buf)
+	dec := gob.NewDecoder(network)
+	return dec.Decode(&p)
 }
