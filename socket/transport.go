@@ -1,6 +1,7 @@
 package socket
 
 import (
+	"crypto/md5"
 	"encoding/binary"
 	"net"
 	"sync"
@@ -61,6 +62,13 @@ func (b *BlockContext) SerializePacket(packetBuffer *[]byte) {
 	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.BlocksPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
 }
 
+func (b *BlockContext) SerializeRetransferPacket(packetBuffer *[]byte, sequenceNum int64) {
+
+	b.BlocksPacketPacker.PackRetransfer(packetBuffer, sequenceNum, b)
+	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.BlocksPacketPacker.GetHeaderLen())
+	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.BlocksPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
+}
+
 func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 	// log.Infof("Received ")
 
@@ -72,7 +80,6 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 	if diff > 1 {
 		var off int64 = 1
 		for off < diff {
-			// log.Infof("Append %d", p.SequenceNumber-off)
 			b.Lock()
 			b.MissingSequenceNums = utils.AppendIfMissing(b.MissingSequenceNums, p.SequenceNumber-off)
 			b.Unlock()
@@ -82,11 +89,15 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 	} else if diff < 0 {
 		// retransfer = true
 		// log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
+		log.Infof("Received md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
 		b.Lock()
 		b.MissingSequenceNums = utils.RemoveFromSlice(b.MissingSequenceNums, p.SequenceNumber)
 		b.Unlock()
 
 	}
+	blockStart := int(p.SequenceNumber-1) * b.PayloadLength
+	end := utils.Min(blockStart+b.PayloadLength, len(b.Data))
+	copy(b.Data[blockStart:end], *packetBuffer)
 	if diff > 0 {
 		b.HighestSequenceNumber += diff
 	}
@@ -129,6 +140,7 @@ type TransportPacketPacker interface {
 type BlocksPacketPacker interface {
 	GetHeaderLen() int
 	Pack(buf *[]byte, blockContect *BlockContext) error
+	PackRetransfer(buf *[]byte, sequenceNum int64, blockContect *BlockContext) error
 	Unpack(buf *[]byte, blockContect *BlockContext) (*BlockPacket, error)
 }
 
@@ -181,6 +193,7 @@ func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
 
 	uts.PacketBuffer = make([]byte, bc.RecommendedBufferSize)
 	var n uint64 = 0
+	j := 0
 	for i := 0; i < bc.NumPackets; i++ {
 		start := i * bc.MaxPacketLength
 		packetBuffer := uts.PacketBuffer[start : start+bc.MaxPacketLength]
@@ -188,13 +201,17 @@ func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
+		if j > 0 && j%100 == 0 {
+			j++
+			i--
+			continue
+		}
 		bc.DeSerializePacket(&packetBuffer)
-		blockStart := i * bc.PayloadLength
-		end := utils.Min(blockStart+bc.PayloadLength, len(bc.Data))
-		copy(bc.Data[blockStart:end], packetBuffer)
+
 		// log.Infof("Extracting payload from %d to %d with md5 for %x", blockStart, blockStart+bc.PayloadLength, md5.Sum(packetBuffer))
 		n += uint64(bts)
 		bc.OnBlockStatusChange(1, bts)
+		j++
 	}
 	return n, nil
 }
@@ -227,6 +244,12 @@ func NewBinaryBlocksPacketPacker() BlocksPacketPacker {
 
 func (bp *BinaryBlocksPacketPacker) GetHeaderLen() int {
 	return 16
+}
+
+func (bp *BinaryBlocksPacketPacker) PackRetransfer(buf *[]byte, sequenceNumber int64, blockContext *BlockContext) error {
+	binary.BigEndian.PutUint64((*buf)[8:16], uint64(sequenceNumber))
+	binary.BigEndian.PutUint64((*buf)[0:8], uint64(blockContext.BlockId))
+	return nil
 }
 
 func (bp *BinaryBlocksPacketPacker) Pack(buf *[]byte, blockContext *BlockContext) error {

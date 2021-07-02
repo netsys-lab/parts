@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/gob"
 	"fmt"
 	"net"
@@ -58,11 +59,13 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 			}
 			// packet := b.packets[v-1]
 			// log.Infof("Sending back %d", v-1)
-			// TODO: How to get packet here, or at least payload
-			packet := b.blockContext.GetPayloadByPacketIndex(int(v))
+			// TODO: How to get already cached packet here, otherwise at least payload
+			packet := b.blockContext.GetPayloadByPacketIndex(int(v - 1))
 			buf := make([]byte, len(packet)+b.blockContext.HeaderLength)
 			copy(buf[b.blockContext.HeaderLength:], packet)
-			b.blockContext.SerializePacket(&buf)
+			log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
+			b.blockContext.SerializeRetransferPacket(&buf, v)
+			// log.Infof("Retransfer sequenceNum %d", v)
 			bts, err := (b.TransportSocket).Write(buf)
 			b.Metrics.TxBytes += uint64(bts)
 			b.Metrics.TxPackets += 1
@@ -73,6 +76,7 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 		}
 		b.blockContext.Lock()
 		b.blockContext.MissingSequenceNums = make([]int64, 0)
+		// log.Infof("Resetting retransfers")
 		b.blockContext.Unlock()
 		time.Sleep(10 * time.Microsecond)
 	}
@@ -103,7 +107,7 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	log.Infof("Wrote %d packets, blockLen %d", blockContext.NumPackets, len(block))
 	// log.Info(block[len(block)-1000:])
 	b.mode = MODE_RETRANSFER
-	b.retransferMissingPackets(&b.missingSequenceNums)
+	b.retransferMissingPackets(&b.blockContext.MissingSequenceNums)
 	time.Sleep(100 * time.Second)
 }
 
@@ -130,6 +134,7 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// TODO: This assumption here is bullshit, we need to read block size from first packet of block id
 	// TODO: How to ensure order of parallel sent blocks? Increasing blockIds?
 	log.Infof("Receiving %d packets", blockContext.NumPackets)
+	// b.requestRetransfers()
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	// TODO: Can not put this into struct for whatever reason
@@ -174,10 +179,10 @@ func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 
 }
 
-func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
+func (b *BlocksConn) requestRetransfers() {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
-	log.Infof("In Call of requestRetransfers %p", missingNums)
+	log.Infof("In Call of requestRetransfers %p", b.blockContext.MissingSequenceNums)
 	go func(missingNums *[]int64) {
 		log.Infof("In Call of requestRetransfers go routine %p", missingNums)
 		for {
@@ -206,9 +211,9 @@ func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 					if err != nil {
 						log.Fatal("encode error:", err)
 					}
-					//for _, v := range p.MissingSequenceNumbers {
-					// log.Infof("Sending missing SequenceNums %v", v)
-					//}
+					for _, v := range p.MissingSequenceNumbers {
+						log.Infof("Sending missing SequenceNums %v", v)
+					}
 					_, err = b.ControlPlane.Write(network.Bytes())
 					if err != nil {
 						log.Fatal("Write error:", err)

@@ -52,5 +52,5 @@ func (cp *ControlPlane) Read(buf []byte) (int, error) {
 
 // TBD: Extract to WriteRetransfers, etc
 func (cp *ControlPlane) Write(buf []byte) (int, error) {
-	return cp.ControlSocket.Read(buf)
+	return cp.ControlSocket.Write(buf)
 }

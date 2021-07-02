@@ -2,12 +2,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/martenwallewein/blocks/blockmetrics"
 	"github.com/martenwallewein/blocks/control"
+	"github.com/martenwallewein/blocks/socket"
+	"github.com/martenwallewein/blocks/utils"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -48,11 +54,17 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 		blockConns:      make([]*BlocksConn, 0),
 		aciveBlockIndex: 0,
 	}
-
-	// blockSock.controlPlane = control.NewControlPlane(localCtrlPort, remoteCtrlPort)
+	var err error
+	blockSock.controlPlane, err = control.NewControlPlane(localCtrlPort, remoteCtrlPort, localAddr, remoteAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for i := range blockSock.modes {
-		blockSock.blockConns = append(blockSock.blockConns, NewBlocksConn(localAddr, remoteAddr, localStartPort+i, remoteStartPort+i, nil))
+		conn := NewBlocksConn(localAddr, remoteAddr, localStartPort+i, remoteStartPort+i, nil)
+		conn.ControlPlane = blockSock.controlPlane
+		blockSock.blockConns = append(blockSock.blockConns, conn)
+
 	}
 
 	blockSock.Metrics = blockmetrics.NewMetrics(1000, NUM_BUFS, func(index int) (uint64, uint64, uint64, uint64) {
@@ -140,7 +152,8 @@ func (b *BlocksSock) WriteBlock(block []byte) {
 	//		b.blockConns[index%NUM_BUFS].WriteBlock(block[halfLen:], int64(index+1)) // BlockIds positive
 	//	}(b.aciveBlockIndex)
 	//	b.aciveBlockIndex++
-	fmt.Printf("WriteBlock for inde2x %d\n", b.aciveBlockIndex%NUM_BUFS)
+	fmt.Printf("WriteBlock for index %d\n", b.aciveBlockIndex%NUM_BUFS)
+	go b.collectRetransfers()
 	b.blockConns[b.aciveBlockIndex%NUM_BUFS].WriteBlock(block[:halfLen], int64(b.aciveBlockIndex+1)) // BlockIds positive
 	b.aciveBlockIndex++
 }
@@ -152,8 +165,8 @@ func (b *BlocksSock) ReadBlock(block []byte) {
 	//	fmt.Printf("ReadBlock for index %d\n", index%NUM_BUFS)
 	//		b.blockConns[index%NUM_BUFS].ReadBlock(block[halfLen:], int64(index+1)) // BlockIds positive
 	//	}(b.aciveBlockIndex)
-
-	fmt.Printf("ReadBlock for inde2x %d\n", b.aciveBlockIndex%NUM_BUFS)
+	fmt.Printf("ReadBlock for index %d\n", b.aciveBlockIndex%NUM_BUFS)
+	go b.requestRetransfers()
 	b.blockConns[b.aciveBlockIndex%NUM_BUFS].ReadBlock(block[:halfLen], int64(b.aciveBlockIndex+1)) // BlockIds positive
 	b.aciveBlockIndex++
 
@@ -162,16 +175,16 @@ func (b *BlocksSock) ReadBlock(block []byte) {
 func (b *BlocksSock) collectRetransfers() {
 	/*go func() {
 		b.retransferMissingPackets()
-	}()
+	}()*/
 	for {
 		buf := make([]byte, PACKET_SIZE+100)
-		bts, err := (*b.ctrlConn).Read(buf)
+		bts, err := b.controlPlane.Read(buf)
 		if err != nil {
 			log.Fatal("error:", err)
 		}
 
 		log.Infof("Received %d ctrl bytes", bts)
-		var p BlockRequestPacket
+		var p socket.BlockRequestPacket
 		// TODO: Fix
 		decodeReqPacket(&p, buf)
 		if err != nil {
@@ -184,17 +197,17 @@ func (b *BlocksSock) collectRetransfers() {
 		for _, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
 			blocksConn.Lock()
-			blocksConn.missingSequenceNums = AppendIfMissing(blocksConn.missingSequenceNums, v)
+			blocksConn.blockContext.MissingSequenceNums = utils.AppendIfMissing(blocksConn.blockContext.MissingSequenceNums, v)
 			blocksConn.Unlock()
 		}
 		// b.missingSequenceNums[index] = append(b.missingSequenceNums[index], p.MissingSequenceNumbers...)
 		// log.Infof("Added %d sequenceNumbers to missingSequenceNumbers", len(p.MissingSequenceNumbers))
 	}
-	*/
+
 }
 
 func (b *BlocksSock) requestRetransfers() {
-	/*ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
 	// log.Infof("In Call of requestRetransfers %p", missingNums)
 	// log.Infof("In Call of requestRetransfers go routine %p", missingNums)
@@ -207,29 +220,24 @@ func (b *BlocksSock) requestRetransfers() {
 				missingNumsPerPacket := 100
 				missingNumIndex := 0
 				start := 0
-				// for _, v := range *missingNums {
-				//	log.Infof("Having missing SequenceNums %v", v)
-				//}
-
-				for missingNumIndex < len(blocksConn.missingSequenceNums) {
-					min := Min(start+missingNumsPerPacket, len(blocksConn.missingSequenceNums))
+				for missingNumIndex < len(blocksConn.blockContext.MissingSequenceNums) {
+					min := utils.Min(start+missingNumsPerPacket, len(blocksConn.blockContext.MissingSequenceNums))
 					var network bytes.Buffer        // Stand-in for a network connection
 					enc := gob.NewEncoder(&network) // Will write to network.
-					p := BlockRequestPacket{
-						LastSequenceNumber:     blocksConn.lastReceivedSequenceNumber,
+					p := socket.BlockRequestPacket{
 						BlockId:                blocksConn.BlockId,
-						MissingSequenceNumbers: (blocksConn.missingSequenceNums)[start:min],
+						MissingSequenceNumbers: (blocksConn.blockContext.MissingSequenceNums)[start:min],
 					}
 
 					err := enc.Encode(p)
 					if err != nil {
 						log.Fatal("encode error:", err)
 					}
-					//for _, v := range p.MissingSequenceNumbers {
-					// log.Infof("Sending missing SequenceNums %v", v)
-					//}
-
-					_, err = (b.ctrlConn).WriteTo(network.Bytes(), b.remoteCtrlAddr)
+					for _, v := range p.MissingSequenceNumbers {
+						log.Infof("Sending missing SequenceNums %v", v)
+					}
+					_, err = b.controlPlane.Write(network.Bytes())
+					// _, err = (b.ctrlConn).WriteTo(network.Bytes(), b.remoteCtrlAddr)
 					if err != nil {
 						log.Fatal("Write error:", err)
 					}
@@ -241,5 +249,5 @@ func (b *BlocksSock) requestRetransfers() {
 
 		}
 	}
-	*/
+
 }
