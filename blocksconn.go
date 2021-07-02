@@ -210,9 +210,9 @@ func (b *BlocksConn) requestRetransfers() {
 					if err != nil {
 						log.Fatal("encode error:", err)
 					}
-					for _, v := range p.MissingSequenceNumbers {
+					/*for _, v := range p.MissingSequenceNumbers {
 						log.Infof("Sending missing SequenceNums %v", v)
-					}
+					}*/
 					_, err = b.ControlPlane.Write(network.Bytes())
 					if err != nil {
 						log.Fatal("Write error:", err)

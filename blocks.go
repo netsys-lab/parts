@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	NUM_BUFS           = 1
+	NUM_BUFS           = 4
 	NUM_ACTIVE_BLOCKS  = 1
 	BUF_SIZE           = 1024 * 1024
 	PACKET_SIZE        = 1400
@@ -109,6 +109,7 @@ func (b *BlocksSock) dial() {
 
 		go b.collectRetransfers()
 	}*/
+	go b.collectRetransfers()
 }
 
 func (b *BlocksSock) listen() {
@@ -142,33 +143,55 @@ func (b *BlocksSock) listen() {
 		go b.requestRetransfers()
 
 	}*/
+	go b.requestRetransfers()
 }
 
 func (b *BlocksSock) WriteBlock(block []byte) {
-	halfLen := len(block) / 1
+	blockLen := len(block)
 	// TODO: Ensure waiting
 	//go func(index int) {
 	//	fmt.Printf("WriteBlock for index %d\n", index%NUM_BUFS)
 	//		b.blockConns[index%NUM_BUFS].WriteBlock(block[halfLen:], int64(index+1)) // BlockIds positive
 	//	}(b.aciveBlockIndex)
 	//	b.aciveBlockIndex++
-	fmt.Printf("WriteBlock for index %d\n", b.aciveBlockIndex%NUM_BUFS)
-	go b.collectRetransfers()
-	b.blockConns[b.aciveBlockIndex%NUM_BUFS].WriteBlock(block[:halfLen], int64(b.aciveBlockIndex+1)) // BlockIds positive
-	b.aciveBlockIndex++
+	var wg sync.WaitGroup
+	partLen := (blockLen / NUM_BUFS)
+	for i := 0; i < NUM_BUFS; i++ {
+		wg.Add(1)
+		go func(index int, wg *sync.WaitGroup) {
+			fmt.Printf("WriteBlock for index %d\n", index%NUM_BUFS)
+			start := partLen * index
+			end := utils.Min(start+partLen, blockLen)
+			b.blockConns[index%NUM_BUFS].WriteBlock(block[start:end], int64(index+1)) // BlockIds positive
+			wg.Done()
+		}(b.aciveBlockIndex, &wg)
+		b.aciveBlockIndex++
+	}
+
+	wg.Wait()
+	// fmt.Printf("WriteBlock for index %d\n", b.aciveBlockIndex%NUM_BUFS)
+	// b.blockConns[b.aciveBlockIndex%NUM_BUFS].WriteBlock(block[:halfLen], int64(b.aciveBlockIndex+1)) // BlockIds positive
+	// b.aciveBlockIndex++
 }
 
 func (b *BlocksSock) ReadBlock(block []byte) {
-	halfLen := len(block) / 1
-	// TODO: Ensure waiting
-	//go func(index int) {
-	//	fmt.Printf("ReadBlock for index %d\n", index%NUM_BUFS)
-	//		b.blockConns[index%NUM_BUFS].ReadBlock(block[halfLen:], int64(index+1)) // BlockIds positive
-	//	}(b.aciveBlockIndex)
-	fmt.Printf("ReadBlock for index %d\n", b.aciveBlockIndex%NUM_BUFS)
-	go b.requestRetransfers()
-	b.blockConns[b.aciveBlockIndex%NUM_BUFS].ReadBlock(block[:halfLen], int64(b.aciveBlockIndex+1)) // BlockIds positive
-	b.aciveBlockIndex++
+	blockLen := len(block)
+	var wg sync.WaitGroup
+	partLen := (blockLen / NUM_BUFS)
+	for i := 0; i < NUM_BUFS; i++ {
+		wg.Add(1)
+		go func(index int, wg *sync.WaitGroup) {
+			fmt.Printf("EadBlock for index %d\n", index%NUM_BUFS)
+			start := partLen * index
+			end := utils.Min(start+partLen, blockLen)
+			log.Infof("Receiving for %d blockLen, start %d, %d partLen and end %d", len(block[start:end]), start, partLen, end)
+			b.blockConns[index%NUM_BUFS].ReadBlock(block[start:end], int64(index+1)) // BlockIds positive
+			wg.Done()
+		}(b.aciveBlockIndex, &wg)
+		b.aciveBlockIndex++
+	}
+
+	wg.Wait()
 
 }
 
@@ -217,6 +240,9 @@ func (b *BlocksSock) requestRetransfers() {
 			return
 		case <-ticker.C:
 			for _, blocksConn := range b.blockConns {
+				if blocksConn.blockContext == nil {
+					continue
+				}
 				missingNumsPerPacket := 100
 				missingNumIndex := 0
 				start := 0
@@ -233,9 +259,9 @@ func (b *BlocksSock) requestRetransfers() {
 					if err != nil {
 						log.Fatal("encode error:", err)
 					}
-					for _, v := range p.MissingSequenceNumbers {
+					/*for _, v := range p.MissingSequenceNumbers {
 						log.Infof("Sending missing SequenceNums %v", v)
-					}
+					}*/
 					_, err = b.controlPlane.Write(network.Bytes())
 					// _, err = (b.ctrlConn).WriteTo(network.Bytes(), b.remoteCtrlAddr)
 					if err != nil {
