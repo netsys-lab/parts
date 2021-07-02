@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5"
 	"encoding/gob"
 	"fmt"
 	"net"
@@ -63,7 +62,7 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 			packet := b.blockContext.GetPayloadByPacketIndex(int(v - 1))
 			buf := make([]byte, len(packet)+b.blockContext.HeaderLength)
 			copy(buf[b.blockContext.HeaderLength:], packet)
-			log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
+			// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
 			b.blockContext.SerializeRetransferPacket(&buf, v)
 			// log.Infof("Retransfer sequenceNum %d", v)
 			bts, err := (b.TransportSocket).Write(buf)

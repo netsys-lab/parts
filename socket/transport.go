@@ -1,7 +1,6 @@
 package socket
 
 import (
-	"crypto/md5"
 	"encoding/binary"
 	"net"
 	"sync"
@@ -89,7 +88,7 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 	} else if diff < 0 {
 		// retransfer = true
 		// log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
-		log.Infof("Received md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
+		// log.Infof("Received md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
 		b.Lock()
 		b.MissingSequenceNums = utils.RemoveFromSlice(b.MissingSequenceNums, p.SequenceNumber)
 		b.Unlock()
@@ -201,11 +200,12 @@ func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		if j > 0 && j%100 == 0 {
+		// To test retransfers
+		/*if j > 0 && j%100 == 0 {
 			j++
 			i--
 			continue
-		}
+		}*/
 		bc.DeSerializePacket(&packetBuffer)
 
 		// log.Infof("Extracting payload from %d to %d with md5 for %x", blockStart, blockStart+bc.PayloadLength, md5.Sum(packetBuffer))
