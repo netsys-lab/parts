@@ -1,6 +1,7 @@
 package socket
 
 import (
+	"encoding/binary"
 	"net"
 	"sync"
 
@@ -34,13 +35,13 @@ func (b *BlockContext) Prepare() {
 }
 
 func (b *BlockContext) SerializePacket(packetBuffer *[]byte) {
-	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength)
 	b.BlocksPacketPacker.Pack(packetBuffer, b)
+	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.BlocksPacketPacker.GetHeaderLen())
 }
 
 func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
-	b.BlocksPacketPacker.Unpack(packetBuffer, b)
 	b.TransportPacketPacker.Unpack(packetBuffer)
+	p, _ := b.BlocksPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
 }
 
 type SocketOptions struct {
@@ -62,9 +63,11 @@ type OnBlockStatusChange func(numMsgs int, completedBytes int)
 type TransportSocket interface {
 	// Returns the local Socket Address
 	// GetLocalAddr() net.Addr // TODO: Support *snet.UDPAddr here
-	Listen(addr string)
-	WriteBlock(block []byte, blockContext *BlockContext) (uint64, error)
-	ReadBlock(block []byte, blockContext *BlockContext) (uint64, error)
+	Listen(addr string) error
+	WriteBlock(blockContext *BlockContext) (uint64, error)
+	ReadBlock(blockContext *BlockContext) (uint64, error)
+	Write(buf []byte) (int, error)
+	Read(buf []byte) (int, error)
 	// SetPath(path *snet.Path) error TODO: SCION Specific: How to solve this
 	Dial(addr string) error
 }
@@ -78,7 +81,7 @@ type TransportPacketPacker interface {
 type BlocksPacketPacker interface {
 	GetHeaderLen() int
 	Pack(buf *[]byte, blockContect *BlockContext) error
-	Unpack(buf *[]byte, blockContect *BlockContext) error
+	Unpack(buf *[]byte, blockContect *BlockContext) (*BlockPacket, error)
 }
 
 type UDPTransportSocket struct {
@@ -86,6 +89,10 @@ type UDPTransportSocket struct {
 	LocalAddr    *net.UDPAddr
 	RemoteAddr   *net.UDPAddr
 	PacketBuffer []byte
+}
+
+func NewUDPTransportSocket() *UDPTransportSocket {
+	return &UDPTransportSocket{}
 }
 
 func (uts *UDPTransportSocket) Listen(addr string) error {
@@ -109,7 +116,7 @@ func (uts *UDPTransportSocket) WriteBlock(bc *BlockContext) (uint64, error) {
 		start := i * bc.MaxPacketLength
 		packetBuffer := uts.PacketBuffer[start : start+bc.MaxPacketLength]
 		blockStart := i * bc.PayloadLength
-		copy(packetBuffer, bc.Data[blockStart:blockStart+bc.PayloadLength])
+		copy(packetBuffer[bc.HeaderLength:], bc.Data[blockStart:blockStart+bc.PayloadLength])
 		bc.SerializePacket(&packetBuffer)
 		bts, err := uts.Conn.WriteTo(packetBuffer, uts.RemoteAddr)
 		bc.OnBlockStatusChange(1, bts)
@@ -147,4 +154,35 @@ func (uts *UDPTransportSocket) Dial(addr string) error {
 	}
 	uts.RemoteAddr = udpAddr
 	return nil
+}
+
+func (uts *UDPTransportSocket) Write(buf []byte) (int, error) {
+	return uts.Conn.WriteTo(buf, uts.RemoteAddr)
+}
+func (uts *UDPTransportSocket) Read(buf []byte) (int, error) {
+	return uts.Conn.Read(buf)
+}
+
+type UDPPacketPacker struct {
+}
+
+type BinaryBlocksPacketPacker struct {
+}
+
+func (bp *BinaryBlocksPacketPacker) GetHeaderLen() int {
+	return 0
+}
+
+func (bp *BinaryBlocksPacketPacker) Pack(buf *[]byte, blockContext *BlockContext) error {
+	sequenceNumber := blockContext.GetNextSequenceNumber()
+	binary.BigEndian.PutUint64((*buf)[8:16], uint64(sequenceNumber))
+	binary.BigEndian.PutUint64((*buf)[0:8], uint64(b.BlockId))
+	return nil
+}
+func (bp *BinaryBlocksPacketPacker) Unpack(buf *[]byte, blockContext *BlockContext) (*BlockPacket, error) {
+	p := BlockPacket{}
+	p.SequenceNumber = (int64(binary.BigEndian.Uint64((*buf)[8:16])))
+	p.BlockId = (int64(binary.BigEndian.Uint64((*buf)[0:8])))
+	*buf = (*buf)[blockContext.BlocksPacketPacker.GetHeaderLen():]
+	return &p, nil
 }

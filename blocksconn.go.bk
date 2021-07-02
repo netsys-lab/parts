@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/martenwallewein/blocks/blockmetrics"
-	"github.com/martenwallewein/blocks/socket"
+	"github.com/martenwallewein/blocks/packet"
 	log "github.com/sirupsen/logrus"
 )
 
 type BlocksConn struct {
 	sync.Mutex
+	packets                    [][]byte
 	block                      []byte
-	BlockId                    int64
 	localAddr                  string
 	remoteAddr                 string
 	localStartPort             int
@@ -25,30 +25,89 @@ type BlocksConn struct {
 	lastRequestedSequenceIndex []int64
 	retransferPackets          [][]byte
 	missingSequenceNums        []int64
+	dataConn                   *net.UDPConn
+	ctrlConn                   *net.UDPConn
 	mode                       int
+	BlockId                    int64
+	lastReceivedSequenceNumber int64
+	nextPacketIndex            *int
+	processPacketIndex         *int
+	remoteCtrlAddr             *net.UDPAddr
+	localCtrlAddr              *net.UDPAddr
+	packetPacker               *packet.SCIONPacketPacker
 	Metrics                    blockmetrics.SocketMetrics
-	TransportSocket            socket.TransportSocket
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, ctrlConn *net.UDPConn) *BlocksConn {
-
+	sPacketPacker, err := packet.NewSCIONPacketPacker(remoteAddr, localAddr, remoteStartPort)
+	if err != nil {
+		log.Fatal(err)
+	}
 	blocksConn := &BlocksConn{
 		missingSequenceNums: make([]int64, 0),
 		localAddr:           localAddr,
 		remoteAddr:          remoteAddr,
 		localStartPort:      localStartPort,
 		remoteStartPort:     remoteStartPort,
+		ctrlConn:            ctrlConn,
+		packetPacker:        sPacketPacker,
 	}
-
-	blocksConn.TransportSocket = socket.NewUDPTransportSocket()
+	val := 0
+	val2 := 0
+	blocksConn.nextPacketIndex = &val
+	blocksConn.processPacketIndex = &val2
 
 	return blocksConn
 }
 
+func (b *BlocksConn) createPackets() {
+	start := 0
+	end := len(b.block)
+	sequenceNumber := 1
+	pIndex := 0
+	bt := make([]byte, 8)
+	scionHeaderLen := b.packetPacker.GetHeaderLen()
+	for start < end {
+		buf := make([]byte, 0)
+		next := PACKET_SIZE - BLOCKS_HEADER_SIZE - scionHeaderLen
+		// Will write to network.
+		// var network bytes.Buffer        // Stand-in for a network connection
+		// enc := gob.NewEncoder(&network) // Will write to network.
+		min := Min(start+next, end)
+		/*p := BlockPacket{
+			SequenceNumber: int64(sequenceNumber),
+			BlockId:        b.BlockId,
+			BlockSize:      0, // int64(end), TODO: Changes header size
+			Payload:        b.block[start:min],
+		}*/
+		b.packetPacker.Pack(&buf, 0, uint16(min-start+BLOCKS_HEADER_SIZE+8))
+		binary.BigEndian.PutUint64(bt, uint64(sequenceNumber))
+		buf = append(buf, bt...)
+		// fmt.Println(buf)
+		binary.BigEndian.PutUint64(bt, uint64(b.BlockId))
+		buf = append(buf, bt...)
+
+		buf = append(buf, b.block[start:min]...)
+		// log.Infof("Send seq %d and md5 for buf %x", uint64(sequenceNumber), md5.Sum(buf))
+		// fmt.Println(buf[0:8])
+		b.packets[pIndex] = buf
+		// log.Infof("Before Send md5 payload %x", md5.Sum(p.Payload))
+		// err := encodePacket(&p, b.packets[pIndex])
+		// err := enc.Encode(p)
+		// b.packets[pIndex] = network.Bytes()
+		// if err != nil {
+		//	log.Fatalf("error: %s", err)
+		//}
+		sequenceNumber++
+		start += next
+		pIndex++
+	}
+}
+
 func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
-	/*ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
-	go func() {
+	/*go func() {
 		for {
 			select {
 			case <-done:
@@ -66,10 +125,9 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 			if v == 0 {
 				log.Fatal("error 0 sequenceNumber")
 			}
-			// packet := b.packets[v-1]
+			packet := b.packets[v-1]
 			// log.Infof("Sending back %d", v-1)
-			// TODO: How to get packet here, or at least payload
-			bts, err := (*&b.TransportSocket).Write([]byte{})
+			bts, err := (*b.dataConn).Write(packet)
 			b.Metrics.TxBytes += uint64(bts)
 			b.Metrics.TxPackets += 1
 			// time.Sleep(1 * time.Microsecond)
@@ -82,20 +140,54 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 		b.Unlock()
 		time.Sleep(10 * time.Microsecond)
 	}
+	ticker.Stop()
+	done <- true
 }
 
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: Save activeBlockCount and increase immediatly
 	// TODO: Not overwrite if actually sending
-	blockContext := socket.BlockContext{}
-	blockContext.Data = block
-	blockContext.Prepare()
-	log.Infof("Writing %d packets", blockContext.NumPackets)
+	b.block = block
+	b.BlockId = int64(blockId)
+	scionHeaderLen := b.packetPacker.GetHeaderLen()
+	b.packets = make([][]byte, CeilForce(int64(len(block)), int64(PACKET_SIZE-BLOCKS_HEADER_SIZE-scionHeaderLen)))
+	log.Infof("Writing %d packets", len(b.packets))
 	// b.packets[b.activeBlockCount] = make([][]byte, len(block)/PACKET_SIZE)
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	b.mode = MODE_SENDING
-	b.TransportSocket.WriteBlock(&blockContext)
+	if b.dataConn == nil {
+		/*raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}*/
+		dstUpdAdr := &net.UDPAddr{
+			IP:   b.packetPacker.DestAddr.NextHop.IP,
+			Port: b.packetPacker.DestAddr.NextHop.Port,
+		}
+		updAdr := &net.UDPAddr{
+			IP:   b.packetPacker.LocalAddr.IP,
+			Port: b.localStartPort,
+		}
+		var err error
+		b.dataConn, err = net.DialUDP("udp", updAdr, dstUpdAdr)
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		fmt.Printf("Dialed to %s", b.dataConn.RemoteAddr())
+	}
+	fmt.Println(b.ctrlConn)
+	/*go func(ctrlCon *net.UDPConn, missingNums *[]int64) {
+		b.collectRetransfers(ctrlCon, missingNums)
+	}(b.ctrlConn, &b.missingSequenceNums)*/
+
+	// TODO: Synchronize this
+	b.createPackets()
+	b.sendPackets(b.dataConn)
 	b.mode = MODE_RETRANSFER
 	b.retransferMissingPackets(&b.missingSequenceNums)
 	time.Sleep(100 * time.Second)
@@ -105,17 +197,104 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// TODO: Not overwrite if actually receiving
 	b.block = block
 	b.BlockId = blockId
-	blockContext := socket.BlockContext{}
-	blockContext.Prepare()
 	// TODO: This assumption here is bullshit, we need to read block size from first packet of block id
 	// TODO: How to ensure order of parallel sent blocks? Increasing blockIds?
-	log.Infof("Receiving %d packets", blockContext.NumPackets)
+	scionHeaderLen := b.packetPacker.GetHeaderLen()
+	b.packets = make([][]byte, CeilForce(int64(len(block)), int64(PACKET_SIZE-BLOCKS_HEADER_SIZE-scionHeaderLen)))
+	*b.nextPacketIndex = 0
+	*b.processPacketIndex = 0
+	log.Infof("Receiving %d packets", len(b.packets))
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	// TODO: Can not put this into struct for whatever reason
-	blockContext.Data = block
-	b.TransportSocket.ReadBlock(&blockContext)
+	if b.dataConn == nil {
+		/*laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+		if err != nil {
+			log.Fatal("error:", err)
+		}*/
+		updAdr := &net.UDPAddr{
+			IP:   b.packetPacker.LocalAddr.IP,
+			Port: b.localStartPort,
+		}
+		var err error
+		b.dataConn, err = net.ListenUDP("udp", updAdr)
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		fmt.Printf("Listen on %s\n", updAdr.String())
+	}
 
+	log.Infof("Before call of receive %p", b.nextPacketIndex)
+	go func(conn *net.UDPConn) {
+		log.Infof("In call of receive %p", b.nextPacketIndex)
+		b.receivePackets(conn, b.nextPacketIndex)
+	}(b.dataConn)
+	log.Infof("After call of receive %p", b.nextPacketIndex)
+	log.Infof("After call of missingnums %p", &b.missingSequenceNums)
+	/*go func(ctrlCon *net.UDPConn, missingNums *[]int64) {
+		log.Infof("In call of retransfers %p", missingNums)
+		b.requestRetransfers(ctrlCon, missingNums)
+	}(b.ctrlConn, &b.missingSequenceNums)*/
+
+	b.parsePackets(b.nextPacketIndex, &b.missingSequenceNums)
+}
+
+func (b *BlocksConn) receivePackets(conn *net.UDPConn, nextPacketIndex *int) {
+	// length := len(b.packets)
+	i := 0
+	j := 0
+	ticker := time.NewTicker(1000 * time.Millisecond)
+	done := make(chan bool)
+	lastNextPacketIndex := *nextPacketIndex
+	/*go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				bandwidth := (b.receivedBytes - b.lastReceivedBytes) * 8 / 1024 / 1024
+				log.Infof("Read with %d Mbit/s having %d received packets", bandwidth, b.receivedPackets)
+				b.lastReceivedBytes = b.receivedBytes
+			}
+		}
+	}()*/
+	for i := range b.packets {
+		b.packets[i] = make([]byte, PACKET_SIZE+100)
+	}
+	log.Infof("In Receive nextPacketIndex addr %p", b.nextPacketIndex)
+	for b.mode != MODE_DONE && *b.nextPacketIndex < len(b.packets) {
+		//if *b.nextPacketIndex >= length {
+		//	*b.nextPacketIndex = 0
+		//}
+		// b.packets[index][i] = make([]byte, PACKET_SIZE+1000)
+		// TODO: Check bytes read
+		// fmt.Println("READING")
+		bts, err := conn.Read(b.packets[*b.nextPacketIndex])
+		b.packets[*b.nextPacketIndex] = b.packets[*b.nextPacketIndex][:bts]
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+
+		b.Metrics.RxBytes += uint64(bts)
+		b.Metrics.RxPackets += 1
+		lastNextPacketIndex++
+		*b.nextPacketIndex++
+		j++
+		/*if j > 0 && j%1000 == 0 {
+			j++
+			log.Infof("CONTIENU %d", j)
+			continue
+		}*/
+
+		// log.Infof("Receiving md5 %x", md5.Sum(buf[:bts]))
+		// b.packets[index][i] = b.packets[index][i][:bts] //make([]byte, bts)
+		// copy(b.packets[index][i], buf[:bts])
+		// fmt.Println(b.packets[index][i])
+		// fmt.Printf("READ BYTES %d\n for index %d\n", bts, i)
+		i++
+	}
+	ticker.Stop()
+	done <- true
 }
 
 func (b *BlocksConn) parsePackets(nextPacketIndex *int, missingNums *[]int64) {
