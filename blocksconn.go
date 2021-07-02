@@ -1,15 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"encoding/gob"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/martenwallewein/blocks/blockmetrics"
 	"github.com/martenwallewein/blocks/socket"
-	"github.com/martenwallewein/blocks/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -58,7 +55,7 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 				b.lastReceivedBytes = b.receivedBytes
 			}
 		}
-	}()*/
+	}()
 	log.Infof("Entering retransfer")
 	for b.mode == MODE_RETRANSFER {
 		for _, v := range *missingNums {
@@ -80,7 +77,7 @@ func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
 		*missingNums = make([]int64, 0)
 		b.Unlock()
 		time.Sleep(10 * time.Microsecond)
-	}
+	}*/
 }
 
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
@@ -120,7 +117,7 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
 	/*go func() {
 		b.retransferMissingPackets()
-	}()*/
+	}()
 	for {
 		buf := make([]byte, PACKET_SIZE+100)
 		bts, err := (*b.ctrlConn).Read(buf)
@@ -146,12 +143,12 @@ func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 		}
 		// b.missingSequenceNums[index] = append(b.missingSequenceNums[index], p.MissingSequenceNumbers...)
 		// log.Infof("Added %d sequenceNumbers to missingSequenceNumbers", len(p.MissingSequenceNumbers))
-	}
+	}*/
 
 }
 
 func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	/*ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
 	log.Infof("In Call of requestRetransfers %p", missingNums)
 	go func(missingNums *[]int64) {
@@ -198,4 +195,5 @@ func (b *BlocksConn) requestRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 			}
 		}
 	}(missingNums)
+	*/
 }

@@ -2,16 +2,12 @@
 package main
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/martenwallewein/blocks/blockmetrics"
 	"github.com/martenwallewein/blocks/control"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -25,19 +21,6 @@ const (
 	MODE_RECEIVING     = 2
 	MODE_DONE          = 3
 )
-
-type BlockRequestPacket struct {
-	BlockId                int64
-	LastSequenceNumber     int64
-	MissingSequenceNumbers []int64
-}
-
-type BlockPacket struct {
-	SequenceNumber int64
-	BlockId        int64
-	BlockSize      int64
-	Payload        []byte
-}
 
 type BlocksSock struct {
 	sync.Mutex
@@ -66,7 +49,7 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 		aciveBlockIndex: 0,
 	}
 
-	blockSock.controlPlane = control.NewControlPlane(localCtrlPort, remoteCtrlPort)
+	// blockSock.controlPlane = control.NewControlPlane(localCtrlPort, remoteCtrlPort)
 
 	for i := range blockSock.modes {
 		blockSock.blockConns = append(blockSock.blockConns, NewBlocksConn(localAddr, remoteAddr, localStartPort+i, remoteStartPort+i, nil))
@@ -179,7 +162,7 @@ func (b *BlocksSock) ReadBlock(block []byte) {
 func (b *BlocksSock) collectRetransfers() {
 	/*go func() {
 		b.retransferMissingPackets()
-	}()*/
+	}()
 	for {
 		buf := make([]byte, PACKET_SIZE+100)
 		bts, err := (*b.ctrlConn).Read(buf)
@@ -207,11 +190,11 @@ func (b *BlocksSock) collectRetransfers() {
 		// b.missingSequenceNums[index] = append(b.missingSequenceNums[index], p.MissingSequenceNumbers...)
 		// log.Infof("Added %d sequenceNumbers to missingSequenceNumbers", len(p.MissingSequenceNumbers))
 	}
-
+	*/
 }
 
 func (b *BlocksSock) requestRetransfers() {
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	/*ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
 	// log.Infof("In Call of requestRetransfers %p", missingNums)
 	// log.Infof("In Call of requestRetransfers go routine %p", missingNums)
@@ -258,4 +241,5 @@ func (b *BlocksSock) requestRetransfers() {
 
 		}
 	}
+	*/
 }
