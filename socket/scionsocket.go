@@ -1,5 +1,6 @@
 package socket
 
+/*
 import (
 	"fmt"
 	"net"
@@ -89,7 +90,7 @@ func (s *SCIONSocket) GetLocalAddr() *snet.UDPAddr {
 func (s *SCIONSocket) ReadRaw([]byte) (int, error) {
 
 }
-*/
+
 func (s *SCIONSocket) WriteBlock([]byte) (int, error)
 func (s *SCIONSocket) ReadBlock([]byte) (int, error)
 func (s *SCIONSocket) Connect(string) error
@@ -99,7 +100,8 @@ func (s *SCIONSocket) SetOptions(*SocketOptions)
 func (s *SCIONSocket) ReadRawMultiple([]byte, int) (int, error)
 func (s *SCIONSocket) WriteMultiplePackets([]byte, int) (int, error)
 func (s *SCIONSocket) ReadMultiplePackets([]byte, int) (int, error)
-*/
+
 func (s *SCIONSocket) GetHeaderLen() int
 func (s *SCIONSocket) PackPacket(*[]byte, int, uint16) error
 func (s *SCIONSocket) UnpackPacket(*[]byte) (int, error)
+*/

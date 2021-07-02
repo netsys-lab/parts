@@ -90,6 +90,7 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 		MaxPacketLength:       PACKET_SIZE,
 		BlockId:               blockId,
 		Data:                  block,
+		OnBlockStatusChange:   func(numMsg int, bytes int) {},
 	}
 
 	blockContext.Prepare()
@@ -102,6 +103,8 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: sync write calls
 	b.mode = MODE_SENDING
 	b.TransportSocket.WriteBlock(&blockContext)
+	log.Infof("Wrote %d packets, blockLen %d", blockContext.NumPackets, len(block))
+	// log.Info(block[len(block)-1000:])
 	b.mode = MODE_RETRANSFER
 	b.retransferMissingPackets(&b.missingSequenceNums)
 	time.Sleep(100 * time.Second)
@@ -117,9 +120,14 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 		MaxPacketLength:       PACKET_SIZE,
 		BlockId:               blockId,
 		Data:                  block,
+		OnBlockStatusChange:   func(numMsg int, bytes int) {},
 	}
 	blockContext.Prepare()
-	b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+	err := b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+	if err != nil {
+		log.Infof("Failed to listen on %s", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+		log.Fatal(err)
+	}
 	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
 	// TODO: This assumption here is bullshit, we need to read block size from first packet of block id
 	// TODO: How to ensure order of parallel sent blocks? Increasing blockIds?
@@ -127,9 +135,11 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	// TODO: Can not put this into struct for whatever reason
-	blockContext.Data = block
-	b.TransportSocket.ReadBlock(&blockContext)
 
+	b.TransportSocket.ReadBlock(&blockContext)
+	log.Infof("Received %d packets, blockLen %d", blockContext.NumPackets, len(block))
+	// log.Info(block[len(block)-1000:])
+	// copy(block, blockContext.Data)
 }
 
 func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {

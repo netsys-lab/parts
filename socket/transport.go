@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/martenwallewein/blocks/utils"
+	log "github.com/sirupsen/logrus"
 )
 
 type BlockContext struct {
@@ -38,21 +39,30 @@ func (b *BlockContext) GetNextSequenceNumber() int64 {
 
 func (b *BlockContext) Prepare() {
 	b.missingNums = make([]int64, 0)
-	b.NumPackets = utils.CeilForceInt(len(b.Data), b.MaxPacketLength)
 	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.BlocksPacketPacker.GetHeaderLen()
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
-	b.RecommendedBufferSize = len(b.Data) + (b.NumPackets * b.HeaderLength)
+	b.NumPackets = utils.CeilForceInt(len(b.Data), b.PayloadLength)
+	b.RecommendedBufferSize = b.NumPackets * b.MaxPacketLength
+	log.Infof("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
+	log.Infof("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
+	log.Infof("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
 }
 
 func (b *BlockContext) SerializePacket(packetBuffer *[]byte) {
+
 	b.BlocksPacketPacker.Pack(packetBuffer, b)
 	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.BlocksPacketPacker.GetHeaderLen())
+	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.BlocksPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
 }
 
 func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
+	// log.Infof("Received ")
+
 	b.TransportPacketPacker.Unpack(packetBuffer)
 	p, _ := b.BlocksPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
 	diff := p.SequenceNumber - b.highestSequenceNumber
+	// log.Infof("Got md5 for %x sequeceNumber %d", md5.Sum(*packetBuffer), b.highestSequenceNumber)
+	// log.Infof("Received SequenceNumber %d", p.SequenceNumber)
 	if diff > 1 {
 		var off int64 = 1
 		for off < diff {
@@ -148,7 +158,9 @@ func (uts *UDPTransportSocket) WriteBlock(bc *BlockContext) (uint64, error) {
 		start := i * bc.MaxPacketLength
 		packetBuffer := uts.PacketBuffer[start : start+bc.MaxPacketLength]
 		blockStart := i * bc.PayloadLength
-		copy(packetBuffer[bc.HeaderLength:], bc.Data[blockStart:blockStart+bc.PayloadLength])
+		end := utils.Min(blockStart+bc.PayloadLength, len(bc.Data))
+		copy(packetBuffer[bc.HeaderLength:], bc.Data[blockStart:end])
+		// log.Infof("Extracting payload from %d to %d with md5 for %x", blockStart, blockStart+bc.PayloadLength, md5.Sum(packetBuffer[bc.HeaderLength:]))
 		bc.SerializePacket(&packetBuffer)
 		bts, err := uts.Conn.WriteTo(packetBuffer, uts.RemoteAddr)
 		bc.OnBlockStatusChange(1, bts)
@@ -172,7 +184,9 @@ func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
 		}
 		bc.DeSerializePacket(&packetBuffer)
 		blockStart := i * bc.PayloadLength
-		copy(bc.Data[blockStart:blockStart+bc.PayloadLength], packetBuffer)
+		end := utils.Min(blockStart+bc.PayloadLength, len(bc.Data))
+		copy(bc.Data[blockStart:end], packetBuffer)
+		// log.Infof("Extracting payload from %d to %d with md5 for %x", blockStart, blockStart+bc.PayloadLength, md5.Sum(packetBuffer))
 		n += uint64(bts)
 		bc.OnBlockStatusChange(1, bts)
 	}

@@ -2,8 +2,6 @@ package control
 
 import (
 	"net"
-
-	"github.com/martenwallewein/blocks/socket"
 )
 
 type ControlPeer struct {
@@ -14,8 +12,8 @@ type ControlPeer struct {
 type ControlPlane struct {
 	localCtrlPort int
 	localCtrlAddr string
-	ControlSocket *socket.SCIONSocket
-	Peers         []ControlPeer
+	// ControlSocket *socket.SCIONSocket
+	Peers []ControlPeer
 }
 
 func NewControlPlane(localCtrlPort int, remoteCtrlPort int, remoteCtrlAddr string, localCtrlAddr string) (*ControlPlane, error) {
@@ -26,11 +24,11 @@ func NewControlPlane(localCtrlPort int, remoteCtrlPort int, remoteCtrlAddr strin
 		Peers:         make([]ControlPeer, 0),
 	}
 
-	sock, err := socket.NewSCIONSocket(localCtrlAddr, localCtrlPort)
-	if err != nil {
-		return nil, err
-	}
-	cp.ControlSocket = sock
+	// sock, err := socket.NewSCIONSocket(localCtrlAddr, localCtrlPort)
+	//if err != nil {
+	//	return nil, err
+	//}
+	// cp.ControlSocket = sock
 	return &cp, nil
 }
 
