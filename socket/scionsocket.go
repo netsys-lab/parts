@@ -8,12 +8,6 @@ import (
 	"github.com/scionproto/scion/go/lib/snet"
 )
 
-type SocketOptions struct {
-	UseMmsg              bool
-	UseGsoGro            bool
-	StartWithDefaultPath bool
-}
-
 type UnderlaySocket interface {
 	GetLocalAddr() *snet.UDPAddr
 	WriteRaw([]byte) (int, error)
@@ -83,7 +77,8 @@ func (s *SCIONSocket) SetPath(path *snet.Path) {
 func (s *SCIONSocket) GetLocalAddr() *snet.UDPAddr {
 	return s.LocalAddr
 }
-func (s *SCIONSocket) WriteRaw(buf []byte) (int, error) {
+
+/*func (s *SCIONSocket) WriteRaw(buf []byte) (int, error) {
 	payloadLen := len(buf)
 	newBuf := make([]byte, s.GetHeaderLen()+payloadLen)
 	s.Packer.Pack(&newBuf, 0, uint16(payloadLen))
@@ -94,14 +89,17 @@ func (s *SCIONSocket) WriteRaw(buf []byte) (int, error) {
 func (s *SCIONSocket) ReadRaw([]byte) (int, error) {
 
 }
-func (s *SCIONSocket) WritePacket([]byte) (int, error)
-func (s *SCIONSocket) ReadPacket([]byte) (int, error)
+*/
+func (s *SCIONSocket) WriteBlock([]byte) (int, error)
+func (s *SCIONSocket) ReadBlock([]byte) (int, error)
 func (s *SCIONSocket) Connect(string) error
 func (s *SCIONSocket) SetOptions(*SocketOptions)
-func (s *SCIONSocket) WriteRawMultiple([]byte, int) (int, error)
+
+/*func (s *SCIONSocket) WriteRawMultiple([]byte, int) (int, error)
 func (s *SCIONSocket) ReadRawMultiple([]byte, int) (int, error)
 func (s *SCIONSocket) WriteMultiplePackets([]byte, int) (int, error)
 func (s *SCIONSocket) ReadMultiplePackets([]byte, int) (int, error)
+*/
 func (s *SCIONSocket) GetHeaderLen() int
 func (s *SCIONSocket) PackPacket(*[]byte, int, uint16) error
 func (s *SCIONSocket) UnpackPacket(*[]byte) (int, error)

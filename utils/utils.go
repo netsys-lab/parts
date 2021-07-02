@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -40,6 +40,16 @@ func Min(x, y int) int {
 }
 
 func CeilForce(x, y int64) int64 {
+	res := x / y
+	f := float64(x) / float64(y)
+	if f > float64(res) {
+		return res + 1
+	} else {
+		return res
+	}
+}
+
+func CeilForceInt(x, y int) int {
 	res := x / y
 	f := float64(x) / float64(y)
 	if f > float64(res) {
