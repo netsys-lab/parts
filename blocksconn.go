@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
 	"github.com/martenwallewein/blocks/blockmetrics"
 	"github.com/martenwallewein/blocks/control"
 	"github.com/martenwallewein/blocks/socket"
-	"github.com/martenwallewein/blocks/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -47,38 +45,6 @@ func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort
 	blocksConn.TransportSocket = socket.NewUDPTransportSocket()
 
 	return blocksConn
-}
-
-func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
-	log.Infof("Entering retransfer")
-	for b.mode == MODE_RETRANSFER {
-		for _, v := range *missingNums {
-			if v == 0 {
-				log.Fatal("error 0 sequenceNumber")
-			}
-			// packet := b.packets[v-1]
-			// log.Infof("Sending back %d", v-1)
-			// TODO: How to get already cached packet here, otherwise at least payload
-			packet := b.blockContext.GetPayloadByPacketIndex(int(v - 1))
-			buf := make([]byte, len(packet)+b.blockContext.HeaderLength)
-			copy(buf[b.blockContext.HeaderLength:], packet)
-			// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
-			b.blockContext.SerializeRetransferPacket(&buf, v)
-			// log.Infof("Retransfer sequenceNum %d", v)
-			bts, err := (b.TransportSocket).Write(buf)
-			b.Metrics.TxBytes += uint64(bts)
-			b.Metrics.TxPackets += 1
-			// time.Sleep(1 * time.Microsecond)
-			if err != nil {
-				log.Fatal("error:", err)
-			}
-		}
-		b.blockContext.Lock()
-		b.blockContext.MissingSequenceNums = make([]int64, 0)
-		// log.Infof("Resetting retransfers")
-		b.blockContext.Unlock()
-		time.Sleep(10 * time.Microsecond)
-	}
 }
 
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
@@ -144,11 +110,47 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// copy(block, blockContext.Data)
 }
 
-func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
+func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
+	log.Infof("Entering retransfer")
+	for b.mode == MODE_RETRANSFER {
+		for i, v := range *missingNums {
+			if v == 0 {
+				log.Fatal("error 0 sequenceNumber")
+			}
+
+			off := int(b.blockContext.MissingSequenceNumOffsets[i])
+			for j := 0; j < off; j++ {
+				// packet := b.packets[v-1]
+				// log.Infof("Sending back %d", v-1)
+				// TODO: How to get already cached packet here, otherwise at least payload
+				packet := b.blockContext.GetPayloadByPacketIndex(int(v) + j - 1)
+				buf := make([]byte, len(packet)+b.blockContext.HeaderLength)
+				copy(buf[b.blockContext.HeaderLength:], packet)
+				// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
+				b.blockContext.SerializeRetransferPacket(&buf, v)
+				// log.Infof("Retransfer sequenceNum %d", v)
+				bts, err := (b.TransportSocket).Write(buf)
+				b.Metrics.TxBytes += uint64(bts)
+				b.Metrics.TxPackets += 1
+				// time.Sleep(1 * time.Microsecond)
+				if err != nil {
+					log.Fatal("error:", err)
+				}
+			}
+
+		}
+		b.blockContext.Lock()
+		b.blockContext.MissingSequenceNums = make([]int64, 0)
+		// log.Infof("Resetting retransfers")
+		b.blockContext.Unlock()
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+/*func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
 	/*go func() {
 		b.retransferMissingPackets()
 	}()
-	*/
 	for {
 		buf := make([]byte, PACKET_SIZE+100)
 		bts, err := b.ControlPlane.Read(buf)
@@ -177,7 +179,8 @@ func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int
 	}
 
 }
-
+*/
+/*
 func (b *BlocksConn) requestRetransfers() {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
@@ -212,7 +215,7 @@ func (b *BlocksConn) requestRetransfers() {
 					}
 					/*for _, v := range p.MissingSequenceNumbers {
 						log.Infof("Sending missing SequenceNums %v", v)
-					}*/
+					}
 					_, err = b.ControlPlane.Write(network.Bytes())
 					if err != nil {
 						log.Fatal("Write error:", err)
@@ -226,7 +229,7 @@ func (b *BlocksConn) requestRetransfers() {
 		}
 	}(&b.blockContext.MissingSequenceNums)
 
-}
+}*/
 
 func decodeReqPacket(p *socket.BlockRequestPacket, buf []byte) error {
 	network := bytes.NewBuffer(buf)

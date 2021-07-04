@@ -30,18 +30,19 @@ const (
 
 type BlocksSock struct {
 	sync.Mutex
-	activeBlockCount int
-	localAddr        string
-	remoteAddr       string
-	localStartPort   int
-	remoteStartPort  int
-	udpCons          []net.Conn
-	ctrlConn         *net.UDPConn
-	modes            []int
-	blockConns       []*BlocksConn
-	controlPlane     *control.ControlPlane
-	aciveBlockIndex  int
-	Metrics          *blockmetrics.Metrics
+	activeBlockCount       int
+	localAddr              string
+	remoteAddr             string
+	localStartPort         int
+	remoteStartPort        int
+	udpCons                []net.Conn
+	ctrlConn               *net.UDPConn
+	modes                  []int
+	blockConns             []*BlocksConn
+	controlPlane           *control.ControlPlane
+	aciveBlockIndex        int
+	Metrics                *blockmetrics.Metrics
+	lastBlockRequestPacket *socket.BlockRequestPacket
 }
 
 func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int) *BlocksSock {
@@ -214,14 +215,23 @@ func (b *BlocksSock) collectRetransfers() {
 			log.Fatal("encode error:", err)
 		}
 
-		log.Infof("Got BlockRequestPacket with maxSequenceNumber %d and blockId", p.LastSequenceNumber, p.BlockId)
+		log.Infof("Got BlockRequestPacket with maxSequenceNumber %d, %d missingNums and blockId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.BlockId)
 		// TODO: Add to retransfers
 		blocksConn := b.blockConns[(p.BlockId-1)%NUM_BUFS]
 		for _, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
-			blocksConn.Lock()
-			blocksConn.blockContext.MissingSequenceNums = utils.AppendIfMissing(blocksConn.blockContext.MissingSequenceNums, v)
-			blocksConn.Unlock()
+			if b.lastBlockRequestPacket != nil && utils.IndexOf(v, b.lastBlockRequestPacket.MissingSequenceNumbers) >= 0 {
+				// We continue here, because we want to avoid duplicate retransfers.
+				// Might be improved later
+			}
+			index := utils.IndexOf(v, blocksConn.blockContext.MissingSequenceNums)
+			if index != -1 {
+				blocksConn.Lock()
+				blocksConn.blockContext.MissingSequenceNums = append(blocksConn.blockContext.MissingSequenceNums, v)
+				blocksConn.blockContext.MissingSequenceNumOffsets = append(blocksConn.blockContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[index])
+				blocksConn.Unlock()
+			}
+
 		}
 		// b.missingSequenceNums[index] = append(b.missingSequenceNums[index], p.MissingSequenceNumbers...)
 		// log.Infof("Added %d sequenceNumbers to missingSequenceNumbers", len(p.MissingSequenceNumbers))
@@ -234,25 +244,31 @@ func (b *BlocksSock) requestRetransfers() {
 	done := make(chan bool)
 	// log.Infof("In Call of requestRetransfers %p", missingNums)
 	// log.Infof("In Call of requestRetransfers go routine %p", missingNums)
+	var txId int64 = 1
 	for {
 		select {
 		case <-done:
 			return
 		case <-ticker.C:
-			for _, blocksConn := range b.blockConns {
+			for i, blocksConn := range b.blockConns {
 				if blocksConn.blockContext == nil {
 					continue
 				}
-				missingNumsPerPacket := 100
+				missingNumsPerPacket := 200
 				missingNumIndex := 0
+				log.Infof("Having %d missing Sequence Numbers for con index %d", len(blocksConn.blockContext.MissingSequenceNums), i)
 				start := 0
+
 				for missingNumIndex < len(blocksConn.blockContext.MissingSequenceNums) {
 					min := utils.Min(start+missingNumsPerPacket, len(blocksConn.blockContext.MissingSequenceNums))
 					var network bytes.Buffer        // Stand-in for a network connection
 					enc := gob.NewEncoder(&network) // Will write to network.
 					p := socket.BlockRequestPacket{
-						BlockId:                blocksConn.BlockId,
-						MissingSequenceNumbers: (blocksConn.blockContext.MissingSequenceNums)[start:min],
+						BlockId:                      blocksConn.BlockId,
+						LastSequenceNumber:           blocksConn.blockContext.HighestSequenceNumber,
+						MissingSequenceNumbers:       (blocksConn.blockContext.MissingSequenceNums)[start:min],
+						MissingSequenceNumberOffsets: (blocksConn.blockContext.MissingSequenceNumOffsets)[start:min],
+						TransactionId:                txId,
 					}
 
 					err := enc.Encode(p)
@@ -262,11 +278,13 @@ func (b *BlocksSock) requestRetransfers() {
 					/*for _, v := range p.MissingSequenceNumbers {
 						log.Infof("Sending missing SequenceNums %v", v)
 					}*/
-					_, err = b.controlPlane.Write(network.Bytes())
+					// log.Infof("Sending missing %d SequenceNums", len(p.MissingSequenceNumbers))
+					// _, err = b.controlPlane.Write(network.Bytes())
+					time.Sleep(100 * time.Millisecond)
 					// _, err = (b.ctrlConn).WriteTo(network.Bytes(), b.remoteCtrlAddr)
-					if err != nil {
-						log.Fatal("Write error:", err)
-					}
+					// if err != nil {
+					//	log.Fatal("Write error:", err)
+					//}
 
 					// log.Infof("Wrote %d ctrl bytes to client", bts)
 					missingNumIndex += min

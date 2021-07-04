@@ -21,15 +21,16 @@ type BlockContext struct {
 	// It must be used within send/receive block to retrieve how large the actual payload is
 	// This must be defined by the TransportSocket, since its the only instance who knows
 	// how big headers are actually.
-	PayloadLength         int
-	NumPackets            int
-	RecommendedBufferSize int
-	HeaderLength          int
-	Data                  []byte
-	HighestSequenceNumber int64
-	MissingSequenceNums   []int64
-	currentSequenceNumber int64
-	BlockId               int64
+	PayloadLength             int
+	NumPackets                int
+	RecommendedBufferSize     int
+	HeaderLength              int
+	Data                      []byte
+	HighestSequenceNumber     int64
+	MissingSequenceNums       []int64
+	MissingSequenceNumOffsets []int64
+	currentSequenceNumber     int64
+	BlockId                   int64
 }
 
 func (b *BlockContext) GetNextSequenceNumber() int64 {
@@ -45,6 +46,7 @@ func (b *BlockContext) GetPayloadByPacketIndex(i int) []byte {
 
 func (b *BlockContext) Prepare() {
 	b.MissingSequenceNums = make([]int64, 0)
+	b.MissingSequenceNumOffsets = make([]int64, 0)
 	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.BlocksPacketPacker.GetHeaderLen()
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
 	b.NumPackets = utils.CeilForceInt(len(b.Data), b.PayloadLength)
@@ -77,20 +79,23 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 	// log.Infof("Got md5 for %x sequeceNumber %d", md5.Sum(*packetBuffer), b.highestSequenceNumber)
 	// log.Infof("Received SequenceNumber %d", p.SequenceNumber)
 	if diff > 1 {
-		var off int64 = 1
-		for off < diff {
-			b.Lock()
-			b.MissingSequenceNums = utils.AppendIfMissing(b.MissingSequenceNums, p.SequenceNumber-off)
-			b.Unlock()
-			off++
-		}
+		// var off int64 = 1
+		// for off < diff {
+		b.Lock()
+		b.MissingSequenceNums = utils.AppendIfMissing(b.MissingSequenceNums, p.SequenceNumber-(diff-1))
+		b.MissingSequenceNumOffsets = utils.AppendIfMissing(b.MissingSequenceNumOffsets, diff-1)
+		b.Unlock()
+		//	off++
+		// }
 		// log.Infof("Appending missing sequence number %d to %d for highest number %d", p.SequenceNumber-off, p.SequenceNumber, highestSequenceNumber)
 	} else if diff < 0 {
 		// retransfer = true
 		// log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
 		// log.Infof("Received md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
 		b.Lock()
-		b.MissingSequenceNums = utils.RemoveFromSlice(b.MissingSequenceNums, p.SequenceNumber)
+		index := utils.IndexOf(p.SequenceNumber, b.MissingSequenceNums)
+		b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
+		b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
 		b.Unlock()
 
 	}

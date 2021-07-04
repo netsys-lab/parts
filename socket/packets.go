@@ -1,9 +1,11 @@
 package socket
 
 type BlockRequestPacket struct {
-	BlockId                int64
-	LastSequenceNumber     int64
-	MissingSequenceNumbers []int64
+	BlockId                      int64
+	LastSequenceNumber           int64
+	MissingSequenceNumbers       []int64
+	MissingSequenceNumberOffsets []int64
+	TransactionId                int64
 }
 
 type BlockPacket struct {
