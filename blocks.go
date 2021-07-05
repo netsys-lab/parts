@@ -233,6 +233,7 @@ func (b *BlocksSock) collectRetransfers() {
 			}
 
 		}
+		b.lastBlockRequestPacket = &p
 		// b.missingSequenceNums[index] = append(b.missingSequenceNums[index], p.MissingSequenceNumbers...)
 		// log.Infof("Added %d sequenceNumbers to missingSequenceNumbers", len(p.MissingSequenceNumbers))
 	}

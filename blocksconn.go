@@ -50,13 +50,21 @@ func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: Save activeBlockCount and increase immediatly
 	// TODO: Not overwrite if actually sending
+
+	rc := control.NewRateControl(
+		100,
+		1000000000,
+	)
+
 	blockContext := socket.BlockContext{
 		BlocksPacketPacker:    socket.NewBinaryBlocksPacketPacker(),
 		TransportPacketPacker: socket.NewUDPTransportPacketPacker(),
 		MaxPacketLength:       PACKET_SIZE,
 		BlockId:               blockId,
 		Data:                  block,
-		OnBlockStatusChange:   func(numMsg int, bytes int) {},
+		OnBlockStatusChange: func(numMsg int, bytes int) {
+			rc.Add(numMsg, int64(bytes))
+		},
 	}
 	b.blockContext = &blockContext
 	blockContext.Prepare()
