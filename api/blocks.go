@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	NUM_BUFS           = 4
+	NUM_BUFS           = 1
 	NUM_ACTIVE_BLOCKS  = 1
 	BUF_SIZE           = 1024 * 1024
 	PACKET_SIZE        = 1400
@@ -258,13 +258,13 @@ func (b *BlocksSock) requestRetransfers() {
 		case <-done:
 			return
 		case <-ticker.C:
-			for i, blocksConn := range b.blockConns {
+			for _, blocksConn := range b.blockConns {
 				if blocksConn.blockContext == nil {
 					continue
 				}
 				missingNumsPerPacket := 200
 				missingNumIndex := 0
-				log.Infof("Having %d missing Sequence Numbers for con index %d", len(blocksConn.blockContext.MissingSequenceNums), i)
+				// log.Infof("Having %d missing Sequence Numbers for con index %d", len(blocksConn.blockContext.MissingSequenceNums), i)
 				start := 0
 
 				for missingNumIndex < len(blocksConn.blockContext.MissingSequenceNums) {

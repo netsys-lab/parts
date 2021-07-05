@@ -45,7 +45,9 @@ func (rc *RateControl) Add(numPackets int, numBytes int64) {
 	}
 
 	rc.LastPacketTime = time.Now()*/
-	time.Sleep(*rc.AveragePacketWaitingTime)
+	if rc.AveragePacketWaitingTime != nil {
+		time.Sleep(*rc.AveragePacketWaitingTime)
+	}
 
 }
 

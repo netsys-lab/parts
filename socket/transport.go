@@ -10,6 +10,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type TestingState struct {
+	sync.Mutex
+	TestingReceiveBuffer []byte
+	TestingWriteIndex    int
+	TestingReadIndex     int
+	BufferCreated        bool
+}
+
+var testingState TestingState
+
 type BlockContext struct {
 	sync.Mutex
 	SocketOptions         SocketOptions
@@ -33,9 +43,6 @@ type BlockContext struct {
 	currentSequenceNumber     int64
 	BlockId                   int64
 	TestingMode               bool
-	TestingReceiveBuffer      []byte
-	TestingWriteIndex         int
-	TestingReadIndex          int
 }
 
 func (b *BlockContext) GetNextSequenceNumber() int64 {
@@ -58,10 +65,11 @@ func (b *BlockContext) SetPayloadByPacketIndex(i int, payload []byte) {
 func (b *BlockContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
 	if b.TestingMode {
 		b.Lock()
-		start := b.TestingWriteIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
-		copy(b.TestingReceiveBuffer[start:end], data)
-		b.TestingWriteIndex++
+		start := testingState.TestingWriteIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
+		copy(testingState.TestingReceiveBuffer[start:end], data)
+		testingState.TestingWriteIndex++
+		log.Infof("Increase b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
 		b.Unlock()
 		return len(data), nil
 	} else {
@@ -71,14 +79,19 @@ func (b *BlockContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
 
 func (b *BlockContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
 	if b.TestingMode {
-		for b.TestingReadIndex >= b.TestingWriteIndex {
-			time.Sleep(1 * time.Microsecond)
+		// log.Infof("Read called")
+		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
+			log.Infof("Check b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
+			time.Sleep(1000 * time.Millisecond)
 		}
+		// log.Infof("Read received")
 		b.Lock()
-		start := b.TestingReadIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
-		copy(data, b.TestingReceiveBuffer[start:end])
-		b.TestingReadIndex++
+		start := testingState.TestingReadIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
+		// log.Infof("Copy from %d to %d, %p", start, end, &testingState.TestingReceiveBuffer)
+		// log.Info(testingState.TestingReceiveBuffer[start:end])
+		copy(data, testingState.TestingReceiveBuffer[start:end])
+		testingState.TestingReadIndex++
 		b.Unlock()
 		return len(data), nil
 	} else {
@@ -89,10 +102,13 @@ func (b *BlockContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
 func (b *BlockContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr net.Addr) (int, error) {
 	if b.TestingMode {
 		b.Lock()
-		start := b.TestingWriteIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
-		copy(b.TestingReceiveBuffer[start:end], data)
-		b.TestingWriteIndex++
+		start := testingState.TestingWriteIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
+		copy(testingState.TestingReceiveBuffer[start:end], data)
+		// log.Infof("Copied from %d to %d, %p", start, end, &testingState.TestingReceiveBuffer)
+		// log.Info(testingState.TestingReceiveBuffer[start:end])
+		testingState.TestingWriteIndex++
+		// log.Infof("Increase b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
 		b.Unlock()
 		return len(data), nil
 	} else {
@@ -102,14 +118,14 @@ func (b *BlockContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr n
 
 func (b *BlockContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
 	if b.TestingMode {
-		for b.TestingReadIndex >= b.TestingWriteIndex {
+		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
 			time.Sleep(1 * time.Microsecond)
 		}
 		b.Lock()
-		start := b.TestingReadIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
-		copy(data, b.TestingReceiveBuffer[start:end])
-		b.TestingReadIndex++
+		start := testingState.TestingReadIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
+		copy(data, testingState.TestingReceiveBuffer[start:end])
+		testingState.TestingReadIndex++
 		b.Unlock()
 		return len(data), nil, nil
 	} else {
@@ -128,8 +144,9 @@ func (b *BlockContext) Prepare() {
 	log.Infof("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
 	log.Infof("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
 
-	if b.TestingMode {
-		b.TestingReceiveBuffer = make([]byte, b.RecommendedBufferSize)
+	if b.TestingMode && !testingState.BufferCreated {
+		testingState.BufferCreated = true
+		testingState.TestingReceiveBuffer = make([]byte, b.RecommendedBufferSize)
 	}
 
 }
@@ -177,6 +194,7 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 		b.Unlock()
 
 	}
+
 	blockStart := int(p.SequenceNumber-1) * b.PayloadLength
 	end := utils.Min(blockStart+b.PayloadLength, len(b.Data))
 	copy(b.Data[blockStart:end], *packetBuffer)
@@ -254,6 +272,7 @@ func (uts *UDPTransportSocket) Listen(addr string) error {
 func (uts *UDPTransportSocket) WriteBlock(bc *BlockContext) (uint64, error) {
 	uts.PacketBuffer = make([]byte, bc.RecommendedBufferSize)
 	var n uint64 = 0
+	log.Infof("Write with %d packets", bc.NumPackets)
 	for i := 0; i < bc.NumPackets; i++ {
 		start := i * bc.MaxPacketLength
 		packetBuffer := uts.PacketBuffer[start : start+bc.MaxPacketLength]

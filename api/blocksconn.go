@@ -64,7 +64,9 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 		BlockId:               blockId,
 		Data:                  block,
 		OnBlockStatusChange: func(numMsg int, bytes int) {
-			rc.Add(numMsg, int64(bytes))
+			if !b.TestingMode {
+				rc.Add(numMsg, int64(bytes))
+			}
 		},
 		TestingMode: b.TestingMode,
 	}
