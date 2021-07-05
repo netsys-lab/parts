@@ -15,37 +15,49 @@ import (
 
 type BlocksConn struct {
 	sync.Mutex
-	block                      []byte
-	BlockId                    int64
-	localAddr                  string
-	remoteAddr                 string
-	localStartPort             int
-	remoteStartPort            int
-	lastRequestedSequenceIndex []int64
-	retransferPackets          [][]byte
-	missingSequenceNums        []int64
-	mode                       int
-	Metrics                    blockmetrics.SocketMetrics
-	TransportSocket            socket.TransportSocket
-	ControlPlane               *control.ControlPlane
-	blockContext               *socket.BlockContext
-	TestingMode                bool
+	block                       []byte
+	BlockId                     int64
+	localAddr                   string
+	remoteAddr                  string
+	localStartPort              int
+	remoteStartPort             int
+	lastRequestedSequenceIndex  []int64
+	retransferPackets           [][]byte
+	missingSequenceNums         []int64
+	mode                        int
+	Metrics                     blockmetrics.SocketMetrics
+	TransportSocket             socket.TransportSocket
+	ControlPlane                *control.ControlPlane
+	blockContext                *socket.BlockContext
+	TestingMode                 bool
+	transportSocketContstructor TransportSocketContstructor
+	transportPackerConstructor  TransportPackerContstructor
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, controlPlane *control.ControlPlane) *BlocksConn {
 
 	blocksConn := &BlocksConn{
-		missingSequenceNums: make([]int64, 0),
-		localAddr:           localAddr,
-		remoteAddr:          remoteAddr,
-		localStartPort:      localStartPort,
-		remoteStartPort:     remoteStartPort,
-		ControlPlane:        controlPlane,
+		missingSequenceNums:         make([]int64, 0),
+		localAddr:                   localAddr,
+		remoteAddr:                  remoteAddr,
+		localStartPort:              localStartPort,
+		remoteStartPort:             remoteStartPort,
+		ControlPlane:                controlPlane,
+		transportSocketContstructor: func() socket.TransportSocket { return socket.NewUDPTransportSocket() },
+		transportPackerConstructor:  func() socket.TransportPacketPacker { return socket.NewUDPTransportPacketPacker() },
 	}
 
-	blocksConn.TransportSocket = socket.NewUDPTransportSocket()
+	blocksConn.TransportSocket = blocksConn.transportSocketContstructor()
 
 	return blocksConn
+}
+
+func (b *BlocksConn) SetTransportSocketConstructor(cons TransportSocketContstructor) {
+	b.transportSocketContstructor = cons
+}
+
+func (b *BlocksConn) SetTransportPackerConstructor(cons TransportPackerContstructor) {
+	b.transportPackerConstructor = cons
 }
 
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
@@ -59,7 +71,7 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 
 	blockContext := socket.BlockContext{
 		BlocksPacketPacker:    socket.NewBinaryBlocksPacketPacker(),
-		TransportPacketPacker: socket.NewUDPTransportPacketPacker(),
+		TransportPacketPacker: b.transportPackerConstructor(),
 		MaxPacketLength:       PACKET_SIZE,
 		BlockId:               blockId,
 		Data:                  block,
@@ -94,7 +106,7 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	b.BlockId = blockId
 	blockContext := socket.BlockContext{
 		BlocksPacketPacker:    socket.NewBinaryBlocksPacketPacker(),
-		TransportPacketPacker: socket.NewUDPTransportPacketPacker(),
+		TransportPacketPacker: b.transportPackerConstructor(),
 		MaxPacketLength:       PACKET_SIZE,
 		BlockId:               blockId,
 		Data:                  block,

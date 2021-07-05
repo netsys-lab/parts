@@ -27,22 +27,27 @@ const (
 	MODE_DONE          = 3
 )
 
+type TransportSocketContstructor func() socket.TransportSocket
+type TransportPackerContstructor func() socket.TransportPacketPacker
+
 type BlocksSock struct {
 	sync.Mutex
-	activeBlockCount       int
-	localAddr              string
-	remoteAddr             string
-	localStartPort         int
-	remoteStartPort        int
-	udpCons                []net.Conn
-	ctrlConn               *net.UDPConn
-	modes                  []int
-	blockConns             []*BlocksConn
-	controlPlane           *control.ControlPlane
-	aciveBlockIndex        int
-	Metrics                *blockmetrics.Metrics
-	lastBlockRequestPacket *socket.BlockRequestPacket
-	testingMode            bool
+	activeBlockCount            int
+	localAddr                   string
+	remoteAddr                  string
+	localStartPort              int
+	remoteStartPort             int
+	udpCons                     []net.Conn
+	ctrlConn                    *net.UDPConn
+	modes                       []int
+	blockConns                  []*BlocksConn
+	controlPlane                *control.ControlPlane
+	aciveBlockIndex             int
+	Metrics                     *blockmetrics.Metrics
+	lastBlockRequestPacket      *socket.BlockRequestPacket
+	testingMode                 bool
+	transportSocketContstructor TransportSocketContstructor
+	transportPackerConstructor  TransportPackerContstructor
 }
 
 func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int) *BlocksSock {
@@ -80,6 +85,20 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 	// gob.Register(BlockPacket{})
 
 	return blockSock
+}
+
+func (b *BlocksSock) SetTransportSocketConstructor(cons TransportSocketContstructor) {
+	b.transportSocketContstructor = cons
+	for _, v := range b.blockConns {
+		v.SetTransportSocketConstructor(cons)
+	}
+}
+
+func (b *BlocksSock) SetTransportPackerConstructor(cons TransportPackerContstructor) {
+	b.transportPackerConstructor = cons
+	for _, v := range b.blockConns {
+		v.SetTransportPackerConstructor(cons)
+	}
 }
 
 func (b *BlocksSock) EnableTestingMode() {

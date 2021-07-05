@@ -9,16 +9,27 @@ import (
 
 	"github.com/anacrolix/tagflag"
 	"github.com/martenwallewein/blocks/api"
+	"github.com/martenwallewein/blocks/socket"
 	log "github.com/sirupsen/logrus"
 )
 
+var socketConstructor api.TransportSocketContstructor
+var packerConstructor api.TransportPackerContstructor
+
 var flags = struct {
-	IsServer bool
-	Config   string
-	InFile   string
-	OutFile  string
+	IsServer   bool
+	Config     string
+	InFile     string
+	LocalAddr  string
+	RemoteAddr string
+	Net        string
+
 	tagflag.StartPos
-}{}
+}{
+	LocalAddr:  "127.0.0.1",
+	RemoteAddr: "127.0.0.1",
+	Net:        "udp",
+}
 
 func LogFatal(msg string, a ...interface{}) {
 	log.Fatal(msg, a)
@@ -44,10 +55,18 @@ func mainErr() error {
 	file, err := ioutil.ReadFile(flags.InFile)
 	Check(err)
 	buffer := make([]byte, len(file))
+
+	// TODO: Add SCION here...
+	switch flags.Net {
+	case "udp":
+		socketConstructor = func() socket.TransportSocket { return socket.NewUDPTransportSocket() }
+		packerConstructor = func() socket.TransportPacketPacker { return socket.NewUDPTransportPacketPacker() }
+	}
+
 	var wg sync.WaitGroup
 	log.Infof("Starting testtransport")
 	log.Infof("Creating server")
-	blockSockServer := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000)
+	blockSockServer := api.NewBlocksSock(flags.LocalAddr, flags.RemoteAddr, 52000, 40000, 51000, 42000)
 	blockSockServer.Listen()
 	blockSockServer.EnableTestingMode()
 	wg.Add(1)
@@ -66,7 +85,7 @@ func mainErr() error {
 	go func(wg *sync.WaitGroup) {
 		blockSockServer.EnableTestingMode()
 		log.Infof("Creating client")
-		blockSockClient := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000)
+		blockSockClient := api.NewBlocksSock(flags.RemoteAddr, flags.LocalAddr, 40000, 52000, 42000, 51000)
 		blockSockClient.Dial()
 		blockSockClient.EnableTestingMode()
 		blockSockClient.WriteBlock(file)
