@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"bytes"
@@ -29,6 +29,7 @@ type BlocksConn struct {
 	TransportSocket            socket.TransportSocket
 	ControlPlane               *control.ControlPlane
 	blockContext               *socket.BlockContext
+	TestingMode                bool
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, controlPlane *control.ControlPlane) *BlocksConn {
@@ -65,6 +66,7 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 		OnBlockStatusChange: func(numMsg int, bytes int) {
 			rc.Add(numMsg, int64(bytes))
 		},
+		TestingMode: b.TestingMode,
 	}
 	b.blockContext = &blockContext
 	blockContext.Prepare()
@@ -95,6 +97,7 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 		BlockId:               blockId,
 		Data:                  block,
 		OnBlockStatusChange:   func(numMsg int, bytes int) {},
+		TestingMode:           b.TestingMode,
 	}
 	b.blockContext = &blockContext
 	blockContext.Prepare()

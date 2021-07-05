@@ -31,6 +31,7 @@ type BlockContext struct {
 	MissingSequenceNumOffsets []int64
 	currentSequenceNumber     int64
 	BlockId                   int64
+	TestingMode               bool
 }
 
 func (b *BlockContext) GetNextSequenceNumber() int64 {
@@ -42,6 +43,44 @@ func (b *BlockContext) GetPayloadByPacketIndex(i int) []byte {
 	blockStart := i * b.PayloadLength
 	end := utils.Min(blockStart+b.PayloadLength, len(b.Data))
 	return b.Data[blockStart:end]
+}
+
+func (b *BlockContext) SetPayloadByPacketIndex(i int, payload []byte) {
+	blockStart := i * b.PayloadLength
+	end := utils.Min(blockStart+b.PayloadLength, len(b.Data))
+	copy(b.Data[blockStart:end], payload)
+}
+
+func (b *BlockContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
+	if b.TestingMode {
+		return 0, nil
+	} else {
+		return conn.Write(data)
+	}
+}
+
+func (b *BlockContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
+	if b.TestingMode {
+		return 0, nil
+	} else {
+		return conn.Read(data)
+	}
+}
+
+func (b *BlockContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr net.Addr) (int, error) {
+	if b.TestingMode {
+		return 0, nil
+	} else {
+		return conn.WriteTo(data, adr)
+	}
+}
+
+func (b *BlockContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
+	if b.TestingMode {
+		return 0, nil, nil
+	} else {
+		return conn.ReadFrom(data)
+	}
 }
 
 func (b *BlockContext) Prepare() {
@@ -179,12 +218,12 @@ func (uts *UDPTransportSocket) WriteBlock(bc *BlockContext) (uint64, error) {
 	for i := 0; i < bc.NumPackets; i++ {
 		start := i * bc.MaxPacketLength
 		packetBuffer := uts.PacketBuffer[start : start+bc.MaxPacketLength]
-		blockStart := i * bc.PayloadLength
-		end := utils.Min(blockStart+bc.PayloadLength, len(bc.Data))
-		copy(packetBuffer[bc.HeaderLength:], bc.Data[blockStart:end])
-		// log.Infof("Extracting payload from %d to %d with md5 for %x", blockStart, blockStart+bc.PayloadLength, md5.Sum(packetBuffer[bc.HeaderLength:]))
+		payload := bc.GetPayloadByPacketIndex(i)
+		copy(packetBuffer[bc.HeaderLength:], payload)
+
 		bc.SerializePacket(&packetBuffer)
-		bts, err := uts.Conn.WriteTo(packetBuffer, uts.RemoteAddr)
+		// bts, err := uts.Conn.WriteTo(packetBuffer, uts.RemoteAddr)
+		bts, err := bc.WriteToPacketConn(uts.Conn, packetBuffer, uts.RemoteAddr)
 		bc.OnBlockStatusChange(1, bts)
 		if err != nil {
 			return 0, err
@@ -201,11 +240,12 @@ func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
 	for i := 0; i < bc.NumPackets; i++ {
 		start := i * bc.MaxPacketLength
 		packetBuffer := uts.PacketBuffer[start : start+bc.MaxPacketLength]
-		bts, err := uts.Conn.Read(packetBuffer)
+		// bts, err := uts.Conn.Read(packetBuffer)
+		bts, err := bc.ReadFromConn(uts.Conn, packetBuffer)
 		if err != nil {
 			return 0, err
 		}
-		// To test retransfers
+		// To test retransfers, drop every 100 packets
 		/*if j > 0 && j%100 == 0 {
 			j++
 			i--

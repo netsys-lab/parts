@@ -1,5 +1,4 @@
-//go:generate zebrapack
-package main
+package api
 
 import (
 	"bytes"
@@ -43,6 +42,7 @@ type BlocksSock struct {
 	aciveBlockIndex        int
 	Metrics                *blockmetrics.Metrics
 	lastBlockRequestPacket *socket.BlockRequestPacket
+	testingMode            bool
 }
 
 func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int) *BlocksSock {
@@ -82,7 +82,14 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 	return blockSock
 }
 
-func (b *BlocksSock) dial() {
+func (b *BlocksSock) EnableTestingMode() {
+	b.testingMode = true
+	for _, v := range b.blockConns {
+		v.TestingMode = true
+	}
+}
+
+func (b *BlocksSock) Dial() {
 	/*if b.ctrlConn == nil {
 
 		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteCtrlPort))
@@ -113,7 +120,7 @@ func (b *BlocksSock) dial() {
 	go b.collectRetransfers()
 }
 
-func (b *BlocksSock) listen() {
+func (b *BlocksSock) Listen() {
 	/*if b.ctrlConn == nil {
 
 		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.localAddr, b.localCtrlPort))
