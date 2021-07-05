@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/anacrolix/tagflag"
+	"github.com/martenwallewein/blocks/api"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -53,8 +54,8 @@ func mainErr() error {
 	buffer := make([]byte, len(file))
 	if isServer {
 		// blockSock := NewBlocksSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
-		blockSock := NewBlocksSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000)
-		blockSock.listen()
+		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000)
+		blockSock.Listen()
 		fmt.Println(len(buffer))
 		log.Infof("Before receiving, buffer md5 %x", md5.Sum(buffer))
 		// go blockSock.ReadBlock(buffer[:halfLen])
@@ -70,8 +71,8 @@ func mainErr() error {
 		// Check(err)
 	} else {
 		fmt.Println(len(buffer))
-		blockSock := NewBlocksSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000)
-		blockSock.dial()
+		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000)
+		blockSock.Dial()
 		// go blockSock.WriteBlock(file[:halfLen])
 		// time.Sleep(10 * time.Millisecond)
 		blockSock.WriteBlock(file)

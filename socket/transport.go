@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/martenwallewein/blocks/utils"
 	log "github.com/sirupsen/logrus"
@@ -32,6 +33,9 @@ type BlockContext struct {
 	currentSequenceNumber     int64
 	BlockId                   int64
 	TestingMode               bool
+	TestingReceiveBuffer      []byte
+	TestingWriteIndex         int
+	TestingReadIndex          int
 }
 
 func (b *BlockContext) GetNextSequenceNumber() int64 {
@@ -53,7 +57,13 @@ func (b *BlockContext) SetPayloadByPacketIndex(i int, payload []byte) {
 
 func (b *BlockContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
 	if b.TestingMode {
-		return 0, nil
+		b.Lock()
+		start := b.TestingWriteIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
+		copy(b.TestingReceiveBuffer[start:end], data)
+		b.TestingWriteIndex++
+		b.Unlock()
+		return len(data), nil
 	} else {
 		return conn.Write(data)
 	}
@@ -61,7 +71,16 @@ func (b *BlockContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
 
 func (b *BlockContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
 	if b.TestingMode {
-		return 0, nil
+		for b.TestingReadIndex >= b.TestingWriteIndex {
+			time.Sleep(1 * time.Microsecond)
+		}
+		b.Lock()
+		start := b.TestingReadIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
+		copy(data, b.TestingReceiveBuffer[start:end])
+		b.TestingReadIndex++
+		b.Unlock()
+		return len(data), nil
 	} else {
 		return conn.Read(data)
 	}
@@ -69,7 +88,13 @@ func (b *BlockContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
 
 func (b *BlockContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr net.Addr) (int, error) {
 	if b.TestingMode {
-		return 0, nil
+		b.Lock()
+		start := b.TestingWriteIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
+		copy(b.TestingReceiveBuffer[start:end], data)
+		b.TestingWriteIndex++
+		b.Unlock()
+		return len(data), nil
 	} else {
 		return conn.WriteTo(data, adr)
 	}
@@ -77,7 +102,16 @@ func (b *BlockContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr n
 
 func (b *BlockContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
 	if b.TestingMode {
-		return 0, nil, nil
+		for b.TestingReadIndex >= b.TestingWriteIndex {
+			time.Sleep(1 * time.Microsecond)
+		}
+		b.Lock()
+		start := b.TestingReadIndex * b.MaxPacketLength
+		end := utils.Min(start+b.MaxPacketLength, len(b.TestingReceiveBuffer))
+		copy(data, b.TestingReceiveBuffer[start:end])
+		b.TestingReadIndex++
+		b.Unlock()
+		return len(data), nil, nil
 	} else {
 		return conn.ReadFrom(data)
 	}
@@ -93,6 +127,11 @@ func (b *BlockContext) Prepare() {
 	log.Infof("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
 	log.Infof("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
 	log.Infof("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
+
+	if b.TestingMode {
+		b.TestingReceiveBuffer = make([]byte, b.RecommendedBufferSize)
+	}
+
 }
 
 func (b *BlockContext) SerializePacket(packetBuffer *[]byte) {
