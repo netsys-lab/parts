@@ -32,6 +32,7 @@ type BlocksConn struct {
 	TestingMode                 bool
 	transportSocketContstructor TransportSocketContstructor
 	transportPackerConstructor  TransportPackerContstructor
+	MaxSpeed                    int64
 }
 
 func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, controlPlane *control.ControlPlane) *BlocksConn {
@@ -60,13 +61,17 @@ func (b *BlocksConn) SetTransportPackerConstructor(cons TransportPackerContstruc
 	b.transportPackerConstructor = cons
 }
 
+func (b *BlocksConn) SetMaxSpeed(maxSpeed int64) {
+	b.MaxSpeed = maxSpeed
+}
+
 func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: Save activeBlockCount and increase immediatly
 	// TODO: Not overwrite if actually sending
 
 	rc := control.NewRateControl(
 		100,
-		2000000000,
+		b.MaxSpeed,
 		PACKET_SIZE,
 	)
 

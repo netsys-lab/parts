@@ -58,6 +58,9 @@ func NewRateControl(
 func (rc *RateControl) Add(numPackets int, numBytes int64) {
 	rc.LastIntervalBytes = numBytes
 	rc.LastIntervalPackets += int64(numPackets)
+	if rc.MaxSpeed == 0 {
+		return
+	}
 	/*if rc.LastIntervalWaitingTime != nil {
 		*rc.LastIntervalWaitingTime += time.Since(rc.LastPacketTime)
 	}
@@ -90,6 +93,10 @@ func (rc *RateControl) Start() {
 
 func (rc *RateControl) recalculateRate() {
 	rc.Lock()
+
+	if rc.MaxSpeed == 0 {
+		return
+	}
 
 	bytesPerSecond := rc.MaxSpeed / 8
 	targetPacketPerSecond := bytesPerSecond / int64(rc.PacketSize)

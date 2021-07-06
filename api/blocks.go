@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	NUM_BUFS           = 1
 	NUM_ACTIVE_BLOCKS  = 1
 	BUF_SIZE           = 1024 * 1024
 	PACKET_SIZE        = 1400
@@ -48,17 +47,20 @@ type BlocksSock struct {
 	testingMode                 bool
 	transportSocketContstructor TransportSocketContstructor
 	transportPackerConstructor  TransportPackerContstructor
+	MaxSpeed                    int64
+	NumCons                     int
 }
 
-func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int) *BlocksSock {
+func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int, numCons int) *BlocksSock {
 	blockSock := &BlocksSock{
 		localAddr:       localAddr,
 		remoteAddr:      remoteAddr,
 		localStartPort:  localStartPort,
 		remoteStartPort: remoteStartPort,
-		modes:           make([]int, NUM_BUFS),
+		modes:           make([]int, numCons),
 		blockConns:      make([]*BlocksConn, 0),
 		aciveBlockIndex: 0,
+		NumCons:         numCons,
 	}
 	var err error
 	blockSock.controlPlane, err = control.NewControlPlane(localCtrlPort, remoteCtrlPort, localAddr, remoteAddr)
@@ -73,7 +75,7 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 
 	}
 
-	blockSock.Metrics = blockmetrics.NewMetrics(1000, NUM_BUFS, func(index int) (uint64, uint64, uint64, uint64) {
+	blockSock.Metrics = blockmetrics.NewMetrics(1000, numCons, func(index int) (uint64, uint64, uint64, uint64) {
 		rxBytes := blockSock.blockConns[index].Metrics.RxBytes
 		txBytes := blockSock.blockConns[index].Metrics.TxBytes
 		rxPackets := blockSock.blockConns[index].Metrics.RxPackets
@@ -85,6 +87,9 @@ func NewBlocksSock(localAddr, remoteAddr string, localStartPort, remoteStartPort
 	// gob.Register(BlockPacket{})
 
 	return blockSock
+}
+func (b *BlocksSock) SetMaxSpeed(maxSpeed int64) {
+	b.MaxSpeed = maxSpeed
 }
 
 func (b *BlocksSock) SetTransportSocketConstructor(cons TransportSocketContstructor) {
@@ -182,14 +187,14 @@ func (b *BlocksSock) WriteBlock(block []byte) {
 	//	}(b.aciveBlockIndex)
 	//	b.aciveBlockIndex++
 	var wg sync.WaitGroup
-	partLen := (blockLen / NUM_BUFS)
-	for i := 0; i < NUM_BUFS; i++ {
+	partLen := (blockLen / b.NumCons)
+	for i := 0; i < b.NumCons; i++ {
 		wg.Add(1)
 		go func(index int, wg *sync.WaitGroup) {
-			fmt.Printf("WriteBlock for index %d\n", index%NUM_BUFS)
+			fmt.Printf("WriteBlock for index %d\n", index%b.NumCons)
 			start := partLen * index
 			end := utils.Min(start+partLen, blockLen)
-			b.blockConns[index%NUM_BUFS].WriteBlock(block[start:end], int64(index+1)) // BlockIds positive
+			b.blockConns[index%b.NumCons].WriteBlock(block[start:end], int64(index+1)) // BlockIds positive
 			wg.Done()
 		}(b.aciveBlockIndex, &wg)
 		b.aciveBlockIndex++
@@ -204,15 +209,15 @@ func (b *BlocksSock) WriteBlock(block []byte) {
 func (b *BlocksSock) ReadBlock(block []byte) {
 	blockLen := len(block)
 	var wg sync.WaitGroup
-	partLen := (blockLen / NUM_BUFS)
-	for i := 0; i < NUM_BUFS; i++ {
+	partLen := (blockLen / b.NumCons)
+	for i := 0; i < b.NumCons; i++ {
 		wg.Add(1)
 		go func(index int, wg *sync.WaitGroup) {
-			fmt.Printf("EadBlock for index %d\n", index%NUM_BUFS)
+			fmt.Printf("EadBlock for index %d\n", index%b.NumCons)
 			start := partLen * index
 			end := utils.Min(start+partLen, blockLen)
 			log.Infof("Receiving for %d blockLen, start %d, %d partLen and end %d", len(block[start:end]), start, partLen, end)
-			b.blockConns[index%NUM_BUFS].ReadBlock(block[start:end], int64(index+1)) // BlockIds positive
+			b.blockConns[index%b.NumCons].ReadBlock(block[start:end], int64(index+1)) // BlockIds positive
 			wg.Done()
 		}(b.aciveBlockIndex, &wg)
 		b.aciveBlockIndex++
@@ -243,7 +248,7 @@ func (b *BlocksSock) collectRetransfers() {
 
 		// log.Infof("Got BlockRequestPacket with maxSequenceNumber %d, %d missingNums and blockId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.BlockId)
 		// TODO: Add to retransfers
-		blocksConn := b.blockConns[(p.BlockId-1)%NUM_BUFS]
+		blocksConn := b.blockConns[(p.BlockId-1)%int64(b.NumCons)]
 		for i, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
 			if b.lastBlockRequestPacket != nil && utils.IndexOf(v, b.lastBlockRequestPacket.MissingSequenceNumbers) >= 0 {

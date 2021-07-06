@@ -66,7 +66,7 @@ func mainErr() error {
 	var wg sync.WaitGroup
 	log.Infof("Starting testtransport")
 	log.Infof("Creating server")
-	blockSockServer := api.NewBlocksSock(flags.LocalAddr, flags.RemoteAddr, 52000, 40000, 51000, 42000)
+	blockSockServer := api.NewBlocksSock(flags.LocalAddr, flags.RemoteAddr, 52000, 40000, 51000, 42000, 1)
 	blockSockServer.Listen()
 	blockSockServer.EnableTestingMode()
 	wg.Add(1)
@@ -85,7 +85,7 @@ func mainErr() error {
 	go func(wg *sync.WaitGroup) {
 		blockSockServer.EnableTestingMode()
 		log.Infof("Creating client")
-		blockSockClient := api.NewBlocksSock(flags.RemoteAddr, flags.LocalAddr, 40000, 52000, 42000, 51000)
+		blockSockClient := api.NewBlocksSock(flags.RemoteAddr, flags.LocalAddr, 40000, 52000, 42000, 51000, 1)
 		blockSockClient.Dial()
 		blockSockClient.EnableTestingMode()
 		blockSockClient.WriteBlock(file)

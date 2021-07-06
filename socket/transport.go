@@ -193,8 +193,11 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 		// log.Infof("Received md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
 		b.Lock()
 		index := utils.IndexOf(p.SequenceNumber, b.MissingSequenceNums)
-		b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
-		b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
+		if index >= 0 {
+			b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
+			b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
+		}
+
 		b.Unlock()
 
 	}

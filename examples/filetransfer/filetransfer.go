@@ -20,10 +20,12 @@ var flags = struct {
 	Config   string
 	InFile   string
 	OutFile  string
+	NumCons  int
 	tagflag.StartPos
 }{
 	IsServer: true,
 	Config:   "blocks.toml",
+	NumCons:  1,
 }
 
 func LogFatal(msg string, a ...interface{}) {
@@ -54,7 +56,7 @@ func mainErr() error {
 	buffer := make([]byte, len(file))
 	if isServer {
 		// blockSock := NewBlocksSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
-		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000)
+		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000, flags.NumCons)
 		blockSock.Listen()
 		fmt.Println(len(buffer))
 		log.Infof("Before receiving, buffer md5 %x", md5.Sum(buffer))
@@ -71,7 +73,7 @@ func mainErr() error {
 		// Check(err)
 	} else {
 		fmt.Println(len(buffer))
-		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000)
+		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000, flags.NumCons)
 		blockSock.Dial()
 		// go blockSock.WriteBlock(file[:halfLen])
 		// time.Sleep(10 * time.Millisecond)
