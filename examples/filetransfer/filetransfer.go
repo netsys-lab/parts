@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/anacrolix/tagflag"
-	"github.com/martenwallewein/blocks/api"
+	"github.com/martenwallewein/parts/api"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,7 +26,7 @@ var flags = struct {
 	tagflag.StartPos
 }{
 	IsServer: true,
-	Config:   "blocks.toml",
+	Config:   "parts.toml",
 	NumCons:  1,
 }
 
@@ -64,14 +64,14 @@ func mainErr() error {
 	}
 
 	if isServer {
-		// blockSock := NewBlocksSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
-		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000, flags.NumCons)
-		blockSock.Listen()
+		// partSock := NewPartsSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
+		partSock := api.NewPartsSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000, flags.NumCons)
+		partSock.Listen()
 		fmt.Println(len(buffer))
 		log.Infof("Before receiving, buffer md5 %x", md5.Sum(buffer))
-		// go blockSock.ReadBlock(buffer[:halfLen])
+		// go partSock.ReadPart(buffer[:halfLen])
 		// time.Sleep(10 * time.Millisecond)
-		blockSock.ReadBlock(buffer)
+		partSock.ReadPart(buffer)
 		/*for i, v := range buffer {
 			if v != file[i] {
 				log.Infof("Byte index %d differs, value at buffer %b", i, v)
@@ -82,11 +82,11 @@ func mainErr() error {
 		// Check(err)
 	} else {
 		fmt.Println(len(buffer))
-		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000, flags.NumCons)
-		blockSock.Dial()
-		// go blockSock.WriteBlock(file[:halfLen])
+		partSock := api.NewPartsSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000, flags.NumCons)
+		partSock.Dial()
+		// go partSock.WritePart(file[:halfLen])
 		// time.Sleep(10 * time.Millisecond)
-		blockSock.WriteBlock(file)
+		partSock.WritePart(file)
 	}
 
 	return nil

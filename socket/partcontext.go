@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/martenwallewein/blocks/utils"
+	"github.com/martenwallewein/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -19,16 +19,16 @@ type TestingState struct {
 
 var testingState TestingState
 
-type BlockContext struct {
+type PartContext struct {
 	sync.Mutex
 	SocketOptions         SocketOptions
-	OnBlockStatusChange   OnBlockStatusChange
-	BlocksPacketPacker    BlocksPacketPacker
+	OnPartStatusChange    OnPartStatusChange
+	PartsPacketPacker     PartsPacketPacker
 	TransportPacketPacker TransportPacketPacker
 	TransferFinished      bool
 	MaxPacketLength       int
 	// The number of bytes of the payload for each packet that has to be send
-	// It must be used within send/receive block to retrieve how large the actual payload is
+	// It must be used within send/receive part to retrieve how large the actual payload is
 	// This must be defined by the TransportSocket, since its the only instance who knows
 	// how big headers are actually.
 	PayloadLength             int
@@ -40,28 +40,28 @@ type BlockContext struct {
 	MissingSequenceNums       []int64
 	MissingSequenceNumOffsets []int64
 	currentSequenceNumber     int64
-	BlockId                   int64
+	PartId                    int64
 	TestingMode               bool
 }
 
-func (b *BlockContext) GetNextSequenceNumber() int64 {
+func (b *PartContext) GetNextSequenceNumber() int64 {
 	b.currentSequenceNumber++
 	return b.currentSequenceNumber
 }
 
-func (b *BlockContext) GetPayloadByPacketIndex(i int) []byte {
-	blockStart := i * b.PayloadLength
-	end := utils.Min(blockStart+b.PayloadLength, len(b.Data))
-	return b.Data[blockStart:end]
+func (b *PartContext) GetPayloadByPacketIndex(i int) []byte {
+	partStart := i * b.PayloadLength
+	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
+	return b.Data[partStart:end]
 }
 
-func (b *BlockContext) SetPayloadByPacketIndex(i int, payload []byte) {
-	blockStart := i * b.PayloadLength
-	end := utils.Min(blockStart+b.PayloadLength, len(b.Data))
-	copy(b.Data[blockStart:end], payload)
+func (b *PartContext) SetPayloadByPacketIndex(i int, payload []byte) {
+	partStart := i * b.PayloadLength
+	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
+	copy(b.Data[partStart:end], payload)
 }
 
-func (b *BlockContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
+func (b *PartContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
 	if b.TestingMode {
 		b.Lock()
 		start := testingState.TestingWriteIndex * b.MaxPacketLength
@@ -76,7 +76,7 @@ func (b *BlockContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
 	}
 }
 
-func (b *BlockContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
+func (b *PartContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
 	if b.TestingMode {
 		// log.Infof("Read called")
 		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
@@ -98,7 +98,7 @@ func (b *BlockContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
 	}
 }
 
-func (b *BlockContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr net.Addr) (int, error) {
+func (b *PartContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr net.Addr) (int, error) {
 	if b.TestingMode {
 		b.Lock()
 		start := testingState.TestingWriteIndex * b.MaxPacketLength
@@ -115,7 +115,7 @@ func (b *BlockContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr n
 	}
 }
 
-func (b *BlockContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
+func (b *PartContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
 	if b.TestingMode {
 		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
 			time.Sleep(1 * time.Microsecond)
@@ -132,10 +132,10 @@ func (b *BlockContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int
 	}
 }
 
-func (b *BlockContext) Prepare() {
+func (b *PartContext) Prepare() {
 	b.MissingSequenceNums = make([]int64, 0)
 	b.MissingSequenceNumOffsets = make([]int64, 0)
-	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.BlocksPacketPacker.GetHeaderLen()
+	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.PartsPacketPacker.GetHeaderLen()
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
 	b.NumPackets = utils.CeilForceInt(len(b.Data), b.PayloadLength)
 	b.RecommendedBufferSize = b.NumPackets * b.MaxPacketLength
@@ -150,25 +150,25 @@ func (b *BlockContext) Prepare() {
 
 }
 
-func (b *BlockContext) SerializePacket(packetBuffer *[]byte) {
+func (b *PartContext) SerializePacket(packetBuffer *[]byte) {
 
-	b.BlocksPacketPacker.Pack(packetBuffer, b)
-	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.BlocksPacketPacker.GetHeaderLen())
-	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.BlocksPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
+	b.PartsPacketPacker.Pack(packetBuffer, b)
+	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.PartsPacketPacker.GetHeaderLen())
+	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.PartsPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
 }
 
-func (b *BlockContext) SerializeRetransferPacket(packetBuffer *[]byte, sequenceNum int64) {
+func (b *PartContext) SerializeRetransferPacket(packetBuffer *[]byte, sequenceNum int64) {
 
-	b.BlocksPacketPacker.PackRetransfer(packetBuffer, sequenceNum, b)
-	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.BlocksPacketPacker.GetHeaderLen())
-	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.BlocksPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
+	b.PartsPacketPacker.PackRetransfer(packetBuffer, sequenceNum, b)
+	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.PartsPacketPacker.GetHeaderLen())
+	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.PartsPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
 }
 
-func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
+func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 	// log.Infof("Received ")
 
 	b.TransportPacketPacker.Unpack(packetBuffer)
-	p, _ := b.BlocksPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
+	p, _ := b.PartsPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
 	diff := p.SequenceNumber - b.HighestSequenceNumber
 	// log.Infof("Got md5 for %x sequeceNumber %d", md5.Sum(*packetBuffer), b.highestSequenceNumber)
 	// log.Infof("Received SequenceNumber %d", p.SequenceNumber)
@@ -201,9 +201,9 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 
 	}
 
-	blockStart := int(p.SequenceNumber-1) * b.PayloadLength
-	end := utils.Min(blockStart+b.PayloadLength, len(b.Data))
-	copy(b.Data[blockStart:end], *packetBuffer)
+	partStart := int(p.SequenceNumber-1) * b.PayloadLength
+	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
+	copy(b.Data[partStart:end], *packetBuffer)
 	if diff > 0 {
 		b.HighestSequenceNumber += diff
 	}

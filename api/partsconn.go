@@ -7,16 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/martenwallewein/blocks/blockmetrics"
-	"github.com/martenwallewein/blocks/control"
-	"github.com/martenwallewein/blocks/socket"
+	"github.com/martenwallewein/parts/control"
+	"github.com/martenwallewein/parts/partmetrics"
+	"github.com/martenwallewein/parts/socket"
 	log "github.com/sirupsen/logrus"
 )
 
-type BlocksConn struct {
+type PartsConn struct {
 	sync.Mutex
-	block                       []byte
-	BlockId                     int64
+	part                        []byte
+	PartId                      int64
 	localAddr                   string
 	remoteAddr                  string
 	localStartPort              int
@@ -25,19 +25,19 @@ type BlocksConn struct {
 	retransferPackets           [][]byte
 	missingSequenceNums         []int64
 	mode                        int
-	Metrics                     blockmetrics.SocketMetrics
+	Metrics                     partmetrics.SocketMetrics
 	TransportSocket             socket.TransportSocket
 	ControlPlane                *control.ControlPlane
-	blockContext                *socket.BlockContext
+	partContext                 *socket.PartContext
 	TestingMode                 bool
 	transportSocketContstructor TransportSocketContstructor
 	transportPackerConstructor  TransportPackerContstructor
 	MaxSpeed                    int64
 }
 
-func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, controlPlane *control.ControlPlane) *BlocksConn {
+func NewPartsConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, controlPlane *control.ControlPlane) *PartsConn {
 
-	blocksConn := &BlocksConn{
+	partsConn := &PartsConn{
 		missingSequenceNums:         make([]int64, 0),
 		localAddr:                   localAddr,
 		remoteAddr:                  remoteAddr,
@@ -48,25 +48,25 @@ func NewBlocksConn(localAddr, remoteAddr string, localStartPort, remoteStartPort
 		transportPackerConstructor:  func() socket.TransportPacketPacker { return socket.NewUDPTransportPacketPacker() },
 	}
 
-	blocksConn.TransportSocket = blocksConn.transportSocketContstructor()
+	partsConn.TransportSocket = partsConn.transportSocketContstructor()
 
-	return blocksConn
+	return partsConn
 }
 
-func (b *BlocksConn) SetTransportSocketConstructor(cons TransportSocketContstructor) {
+func (b *PartsConn) SetTransportSocketConstructor(cons TransportSocketContstructor) {
 	b.transportSocketContstructor = cons
 }
 
-func (b *BlocksConn) SetTransportPackerConstructor(cons TransportPackerContstructor) {
+func (b *PartsConn) SetTransportPackerConstructor(cons TransportPackerContstructor) {
 	b.transportPackerConstructor = cons
 }
 
-func (b *BlocksConn) SetMaxSpeed(maxSpeed int64) {
+func (b *PartsConn) SetMaxSpeed(maxSpeed int64) {
 	b.MaxSpeed = maxSpeed
 }
 
-func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
-	// TODO: Save activeBlockCount and increase immediatly
+func (b *PartsConn) WritePart(part []byte, partId int64) {
+	// TODO: Save activePartCount and increase immediatly
 	// TODO: Not overwrite if actually sending
 
 	rc := control.NewRateControl(
@@ -75,93 +75,93 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 		PACKET_SIZE,
 	)
 
-	blockContext := socket.BlockContext{
-		BlocksPacketPacker:    socket.NewBinaryBlocksPacketPacker(),
+	partContext := socket.PartContext{
+		PartsPacketPacker:     socket.NewBinaryPartsPacketPacker(),
 		TransportPacketPacker: b.transportPackerConstructor(),
 		MaxPacketLength:       PACKET_SIZE,
-		BlockId:               blockId,
-		Data:                  block,
-		OnBlockStatusChange: func(numMsg int, bytes int) {
+		PartId:                partId,
+		Data:                  part,
+		OnPartStatusChange: func(numMsg int, bytes int) {
 			if !b.TestingMode {
 				rc.Add(numMsg, int64(bytes))
 			}
 		},
 		TestingMode: b.TestingMode,
 	}
-	b.blockContext = &blockContext
-	blockContext.Prepare()
+	b.partContext = &partContext
+	partContext.Prepare()
 	b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
 	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
 
-	log.Infof("Writing %d packets", blockContext.NumPackets)
-	// b.packets[b.activeBlockCount] = make([][]byte, len(block)/PACKET_SIZE)
+	log.Infof("Writing %d packets", partContext.NumPackets)
+	// b.packets[b.activePartCount] = make([][]byte, len(part)/PACKET_SIZE)
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	b.mode = MODE_SENDING
 	rc.Start()
-	b.TransportSocket.WriteBlock(&blockContext)
-	log.Infof("Wrote %d packets, blockLen %d", blockContext.NumPackets, len(block))
-	// log.Info(block[len(block)-1000:])
+	b.TransportSocket.WritePart(&partContext)
+	log.Infof("Wrote %d packets, partLen %d", partContext.NumPackets, len(part))
+	// log.Info(part[len(part)-1000:])
 	b.mode = MODE_RETRANSFER
 	b.retransferMissingPackets()
 	time.Sleep(100 * time.Second)
 }
 
-func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
+func (b *PartsConn) ReadPart(part []byte, partId int64) {
 	// TODO: Not overwrite if actually receiving
-	b.block = block
-	b.BlockId = blockId
-	blockContext := socket.BlockContext{
-		BlocksPacketPacker:    socket.NewBinaryBlocksPacketPacker(),
+	b.part = part
+	b.PartId = partId
+	partContext := socket.PartContext{
+		PartsPacketPacker:     socket.NewBinaryPartsPacketPacker(),
 		TransportPacketPacker: b.transportPackerConstructor(),
 		MaxPacketLength:       PACKET_SIZE,
-		BlockId:               blockId,
-		Data:                  block,
-		OnBlockStatusChange:   func(numMsg int, bytes int) {},
+		PartId:                partId,
+		Data:                  part,
+		OnPartStatusChange:    func(numMsg int, bytes int) {},
 		TestingMode:           b.TestingMode,
 	}
-	b.blockContext = &blockContext
-	blockContext.Prepare()
+	b.partContext = &partContext
+	partContext.Prepare()
 	err := b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
 	if err != nil {
 		log.Infof("Failed to listen on %s", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
 		log.Fatal(err)
 	}
 	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
-	// TODO: This assumption here is bullshit, we need to read block size from first packet of block id
-	// TODO: How to ensure order of parallel sent blocks? Increasing blockIds?
-	log.Infof("Receiving %d packets", blockContext.NumPackets)
+	// TODO: This assumption here is bullshit, we need to read part size from first packet of part id
+	// TODO: How to ensure order of parallel sent parts? Increasing partIds?
+	log.Infof("Receiving %d packets", partContext.NumPackets)
 	// b.requestRetransfers()
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	// TODO: Can not put this into struct for whatever reason
 
-	b.TransportSocket.ReadBlock(&blockContext)
-	log.Infof("Received %d packets, blockLen %d", blockContext.NumPackets, len(block))
-	// log.Info(block[len(block)-1000:])
-	// copy(block, blockContext.Data)
+	b.TransportSocket.ReadPart(&partContext)
+	log.Infof("Received %d packets, partLen %d", partContext.NumPackets, len(part))
+	// log.Info(part[len(part)-1000:])
+	// copy(part, partContext.Data)
 }
 
-func (b *BlocksConn) retransferMissingPackets() {
+func (b *PartsConn) retransferMissingPackets() {
 	log.Infof("Entering retransfer")
 	for b.mode == MODE_RETRANSFER {
-		// log.Infof("Having %d missing sequenceNums with addr %p", len(b.blockContext.MissingSequenceNums), &b.blockContext.MissingSequenceNums)
-		for i, v := range b.blockContext.MissingSequenceNums {
+		// log.Infof("Having %d missing sequenceNums with addr %p", len(b.partContext.MissingSequenceNums), &b.partContext.MissingSequenceNums)
+		for i, v := range b.partContext.MissingSequenceNums {
 			if v == 0 {
 				log.Fatal("error 0 sequenceNumber")
 			}
 
-			off := int(b.blockContext.MissingSequenceNumOffsets[i])
+			off := int(b.partContext.MissingSequenceNumOffsets[i])
 			// log.Infof("Sending back %d with offset %d", v-1, off)
 			for j := 0; j < off; j++ {
 				// packet := b.packets[v-1]
 
 				// TODO: How to get already cached packet here, otherwise at least payload
-				packet := b.blockContext.GetPayloadByPacketIndex(int(v) + j - 1)
-				buf := make([]byte, len(packet)+b.blockContext.HeaderLength)
-				copy(buf[b.blockContext.HeaderLength:], packet)
+				packet := b.partContext.GetPayloadByPacketIndex(int(v) + j - 1)
+				buf := make([]byte, len(packet)+b.partContext.HeaderLength)
+				copy(buf[b.partContext.HeaderLength:], packet)
 				// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
-				b.blockContext.SerializeRetransferPacket(&buf, v)
+				b.partContext.SerializeRetransferPacket(&buf, v)
 				// log.Infof("Retransfer sequenceNum %d", v)
 				bts, err := (b.TransportSocket).Write(buf)
 				b.Metrics.TxBytes += uint64(bts)
@@ -173,15 +173,15 @@ func (b *BlocksConn) retransferMissingPackets() {
 			}
 
 		}
-		b.blockContext.Lock()
-		b.blockContext.MissingSequenceNums = make([]int64, 0)
+		b.partContext.Lock()
+		b.partContext.MissingSequenceNums = make([]int64, 0)
 		// log.Infof("Resetting retransfers")
-		b.blockContext.Unlock()
+		b.partContext.Unlock()
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-/*func (b *BlocksConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
+/*func (b *PartsConn) collectRetransfers(ctrlCon *net.UDPConn, missingNums *[]int64) {
 	/*go func() {
 		b.retransferMissingPackets()
 	}()
@@ -193,20 +193,20 @@ func (b *BlocksConn) retransferMissingPackets() {
 		}
 
 		log.Infof("Received %d ctrl bytes", bts)
-		var p socket.BlockRequestPacket
+		var p socket.PartRequestPacket
 		// TODO: Fix
 		decodeReqPacket(&p, buf)
 		if err != nil {
 			log.Fatal("encode error:", err)
 		}
 
-		log.Infof("Got BlockRequestPacket with maxSequenceNumber %d and blockId", p.LastSequenceNumber, p.BlockId)
+		log.Infof("Got PartRequestPacket with maxSequenceNumber %d and partId", p.LastSequenceNumber, p.PartId)
 		// TODO: Add to retransfers
 		for _, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
-			b.blockContext.Lock()
-			b.blockContext.MissingSequenceNums = utils.AppendIfMissing(b.blockContext.MissingSequenceNums, v)
-			b.blockContext.Unlock()
+			b.partContext.Lock()
+			b.partContext.MissingSequenceNums = utils.AppendIfMissing(b.partContext.MissingSequenceNums, v)
+			b.partContext.Unlock()
 		}
 		// b.missingSequenceNums[index] = append(b.missingSequenceNums[index], p.MissingSequenceNumbers...)
 		// log.Infof("Added %d sequenceNumbers to missingSequenceNumbers", len(p.MissingSequenceNumbers))
@@ -215,10 +215,10 @@ func (b *BlocksConn) retransferMissingPackets() {
 }
 */
 /*
-func (b *BlocksConn) requestRetransfers() {
+func (b *PartsConn) requestRetransfers() {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
-	log.Infof("In Call of requestRetransfers %p", b.blockContext.MissingSequenceNums)
+	log.Infof("In Call of requestRetransfers %p", b.partContext.MissingSequenceNums)
 	go func(missingNums *[]int64) {
 		log.Infof("In Call of requestRetransfers go routine %p", missingNums)
 		for {
@@ -237,9 +237,9 @@ func (b *BlocksConn) requestRetransfers() {
 					min := utils.Min(start+missingNumsPerPacket, len(*missingNums))
 					var network bytes.Buffer        // Stand-in for a network connection
 					enc := gob.NewEncoder(&network) // Will write to network.
-					p := socket.BlockRequestPacket{
-						LastSequenceNumber:     b.blockContext.HighestSequenceNumber,
-						BlockId:                b.BlockId,
+					p := socket.PartRequestPacket{
+						LastSequenceNumber:     b.partContext.HighestSequenceNumber,
+						PartId:                b.PartId,
 						MissingSequenceNumbers: (*missingNums)[start:min],
 					}
 
@@ -261,11 +261,11 @@ func (b *BlocksConn) requestRetransfers() {
 
 			}
 		}
-	}(&b.blockContext.MissingSequenceNums)
+	}(&b.partContext.MissingSequenceNums)
 
 }*/
 
-func decodeReqPacket(p *socket.BlockRequestPacket, buf []byte) error {
+func decodeReqPacket(p *socket.PartRequestPacket, buf []byte) error {
 	network := bytes.NewBuffer(buf)
 	dec := gob.NewDecoder(network)
 	return dec.Decode(&p)

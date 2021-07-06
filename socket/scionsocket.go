@@ -91,8 +91,8 @@ func (s *SCIONSocket) ReadRaw([]byte) (int, error) {
 
 }
 
-func (s *SCIONSocket) WriteBlock([]byte) (int, error)
-func (s *SCIONSocket) ReadBlock([]byte) (int, error)
+func (s *SCIONSocket) WritePart([]byte) (int, error)
+func (s *SCIONSocket) ReadPart([]byte) (int, error)
 func (s *SCIONSocket) Connect(string) error
 func (s *SCIONSocket) SetOptions(*SocketOptions)
 

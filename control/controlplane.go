@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/martenwallewein/blocks/socket"
+	"github.com/martenwallewein/parts/socket"
 )
 
 type ControlPeer struct {

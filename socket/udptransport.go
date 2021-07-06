@@ -31,7 +31,7 @@ func (uts *UDPTransportSocket) Listen(addr string) error {
 	return nil
 
 }
-func (uts *UDPTransportSocket) WriteBlock(bc *BlockContext) (uint64, error) {
+func (uts *UDPTransportSocket) WritePart(bc *PartContext) (uint64, error) {
 	uts.PacketBuffer = make([]byte, bc.RecommendedBufferSize)
 	var n uint64 = 0
 	log.Infof("Write with %d packets", bc.NumPackets)
@@ -44,7 +44,7 @@ func (uts *UDPTransportSocket) WriteBlock(bc *BlockContext) (uint64, error) {
 		bc.SerializePacket(&packetBuffer)
 		// bts, err := uts.Conn.WriteTo(packetBuffer, uts.RemoteAddr)
 		bts, err := bc.WriteToPacketConn(uts.Conn, packetBuffer, uts.RemoteAddr)
-		bc.OnBlockStatusChange(1, bts)
+		bc.OnPartStatusChange(1, bts)
 		if err != nil {
 			return 0, err
 		}
@@ -52,7 +52,7 @@ func (uts *UDPTransportSocket) WriteBlock(bc *BlockContext) (uint64, error) {
 	}
 	return n, nil
 }
-func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
+func (uts *UDPTransportSocket) ReadPart(bc *PartContext) (uint64, error) {
 
 	uts.PacketBuffer = make([]byte, bc.RecommendedBufferSize)
 	var n uint64 = 0
@@ -73,9 +73,9 @@ func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
 		}*/
 		bc.DeSerializePacket(&packetBuffer)
 
-		// log.Infof("Extracting payload from %d to %d with md5 for %x", blockStart, blockStart+bc.PayloadLength, md5.Sum(packetBuffer))
+		// log.Infof("Extracting payload from %d to %d with md5 for %x", partStart, partStart+bc.PayloadLength, md5.Sum(packetBuffer))
 		n += uint64(bts)
-		bc.OnBlockStatusChange(1, bts)
+		bc.OnPartStatusChange(1, bts)
 		// j++
 	}
 	return n, nil

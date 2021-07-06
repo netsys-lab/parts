@@ -1,4 +1,4 @@
-package blockmetrics
+package partmetrics
 
 import (
 	"time"
