@@ -16,11 +16,13 @@ import (
 var isServer bool
 
 var flags = struct {
-	IsServer bool
-	Config   string
-	InFile   string
-	OutFile  string
-	NumCons  int
+	IsServer   bool
+	Config     string
+	InFile     string
+	OutFile    string
+	NumCons    int
+	Hash       string
+	BufferSize int
 	tagflag.StartPos
 }{
 	IsServer: true,
@@ -50,10 +52,17 @@ func mainErr() error {
 	tagflag.Parse(&flags)
 
 	isServer = flags.IsServer
+	var file []byte
+	var err error
+	var buffer []byte
+	if !isServer {
+		file, err = ioutil.ReadFile(flags.InFile)
+		Check(err)
+		buffer = make([]byte, len(file))
+	} else {
+		buffer = make([]byte, flags.BufferSize)
+	}
 
-	file, err := ioutil.ReadFile(flags.InFile)
-	Check(err)
-	buffer := make([]byte, len(file))
 	if isServer {
 		// blockSock := NewBlocksSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
 		blockSock := api.NewBlocksSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000, flags.NumCons)
@@ -68,7 +77,7 @@ func mainErr() error {
 				log.Infof("Byte index %d differs, value at buffer %b", i, v)
 			}
 		}*/
-		log.Infof("Got %x md5 for received file compared to %x md5 for local", md5.Sum(buffer), md5.Sum(file))
+		log.Infof("Got %x md5 for received file compared to %s md5 for local", md5.Sum(buffer), flags.Hash)
 		// err := ioutil.WriteFile(flags.OutFile, buffer, 777)
 		// Check(err)
 	} else {
