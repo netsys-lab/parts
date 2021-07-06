@@ -177,8 +177,12 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 		// var off int64 = 1
 		// for off < diff {
 		b.Lock()
-		b.MissingSequenceNums = utils.AppendIfMissing(b.MissingSequenceNums, p.SequenceNumber-(diff-1))
-		b.MissingSequenceNumOffsets = utils.AppendIfMissing(b.MissingSequenceNumOffsets, diff-1)
+		index := utils.IndexOf(p.SequenceNumber-(diff-1), b.MissingSequenceNums)
+		if index < 0 {
+			b.MissingSequenceNums = append(b.MissingSequenceNums, p.SequenceNumber-(diff-1))
+			b.MissingSequenceNumOffsets = append(b.MissingSequenceNumOffsets, diff-1)
+		}
+
 		b.Unlock()
 		//	off++
 		// }
@@ -190,7 +194,7 @@ func (b *BlockContext) DeSerializePacket(packetBuffer *[]byte) {
 		b.Lock()
 		index := utils.IndexOf(p.SequenceNumber, b.MissingSequenceNums)
 		b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
-		b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
+		b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
 		b.Unlock()
 
 	}
@@ -304,7 +308,7 @@ func (uts *UDPTransportSocket) ReadBlock(bc *BlockContext) (uint64, error) {
 			return 0, err
 		}
 		// To test retransfers, drop every 100 packets
-		/*if j > 0 && j%100 == 0 {
+		/*if j > 0 && j%1000 == 0 {
 			j++
 			i--
 			continue

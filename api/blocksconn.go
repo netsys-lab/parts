@@ -66,7 +66,8 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 
 	rc := control.NewRateControl(
 		100,
-		1000000000,
+		2000000000,
+		PACKET_SIZE,
 	)
 
 	blockContext := socket.BlockContext{
@@ -92,11 +93,12 @@ func (b *BlocksConn) WriteBlock(block []byte, blockId int64) {
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	b.mode = MODE_SENDING
+	rc.Start()
 	b.TransportSocket.WriteBlock(&blockContext)
 	log.Infof("Wrote %d packets, blockLen %d", blockContext.NumPackets, len(block))
 	// log.Info(block[len(block)-1000:])
 	b.mode = MODE_RETRANSFER
-	b.retransferMissingPackets(&b.blockContext.MissingSequenceNums)
+	b.retransferMissingPackets()
 	time.Sleep(100 * time.Second)
 }
 
@@ -135,18 +137,20 @@ func (b *BlocksConn) ReadBlock(block []byte, blockId int64) {
 	// copy(block, blockContext.Data)
 }
 
-func (b *BlocksConn) retransferMissingPackets(missingNums *[]int64) {
+func (b *BlocksConn) retransferMissingPackets() {
 	log.Infof("Entering retransfer")
 	for b.mode == MODE_RETRANSFER {
-		for i, v := range *missingNums {
+		// log.Infof("Having %d missing sequenceNums with addr %p", len(b.blockContext.MissingSequenceNums), &b.blockContext.MissingSequenceNums)
+		for i, v := range b.blockContext.MissingSequenceNums {
 			if v == 0 {
 				log.Fatal("error 0 sequenceNumber")
 			}
 
 			off := int(b.blockContext.MissingSequenceNumOffsets[i])
+			// log.Infof("Sending back %d with offset %d", v-1, off)
 			for j := 0; j < off; j++ {
 				// packet := b.packets[v-1]
-				// log.Infof("Sending back %d", v-1)
+
 				// TODO: How to get already cached packet here, otherwise at least payload
 				packet := b.blockContext.GetPayloadByPacketIndex(int(v) + j - 1)
 				buf := make([]byte, len(packet)+b.blockContext.HeaderLength)

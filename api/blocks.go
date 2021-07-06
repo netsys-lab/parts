@@ -228,12 +228,12 @@ func (b *BlocksSock) collectRetransfers() {
 	}()*/
 	for {
 		buf := make([]byte, PACKET_SIZE+100)
-		bts, err := b.controlPlane.Read(buf)
+		_, err := b.controlPlane.Read(buf)
 		if err != nil {
 			log.Fatal("error:", err)
 		}
 
-		log.Infof("Received %d ctrl bytes", bts)
+		// log.Infof("Received %d ctrl bytes", bts)
 		var p socket.BlockRequestPacket
 		// TODO: Fix
 		decodeReqPacket(&p, buf)
@@ -241,20 +241,20 @@ func (b *BlocksSock) collectRetransfers() {
 			log.Fatal("encode error:", err)
 		}
 
-		log.Infof("Got BlockRequestPacket with maxSequenceNumber %d, %d missingNums and blockId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.BlockId)
+		// log.Infof("Got BlockRequestPacket with maxSequenceNumber %d, %d missingNums and blockId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.BlockId)
 		// TODO: Add to retransfers
 		blocksConn := b.blockConns[(p.BlockId-1)%NUM_BUFS]
-		for _, v := range p.MissingSequenceNumbers {
+		for i, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
 			if b.lastBlockRequestPacket != nil && utils.IndexOf(v, b.lastBlockRequestPacket.MissingSequenceNumbers) >= 0 {
 				// We continue here, because we want to avoid duplicate retransfers.
 				// Might be improved later
 			}
 			index := utils.IndexOf(v, blocksConn.blockContext.MissingSequenceNums)
-			if index != -1 {
+			if index < 0 {
 				blocksConn.Lock()
 				blocksConn.blockContext.MissingSequenceNums = append(blocksConn.blockContext.MissingSequenceNums, v)
-				blocksConn.blockContext.MissingSequenceNumOffsets = append(blocksConn.blockContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[index])
+				blocksConn.blockContext.MissingSequenceNumOffsets = append(blocksConn.blockContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[i])
 				blocksConn.Unlock()
 			}
 
@@ -306,7 +306,7 @@ func (b *BlocksSock) requestRetransfers() {
 						log.Infof("Sending missing SequenceNums %v", v)
 					}*/
 					// log.Infof("Sending missing %d SequenceNums", len(p.MissingSequenceNumbers))
-					// _, err = b.controlPlane.Write(network.Bytes())
+					_, err = b.controlPlane.Write(network.Bytes())
 					time.Sleep(100 * time.Millisecond)
 					// _, err = (b.ctrlConn).WriteTo(network.Bytes(), b.remoteCtrlAddr)
 					// if err != nil {
