@@ -1,4 +1,4 @@
-module github.com/martenwallewein/blocks
+module github.com/martenwallewein/parts
 
 go 1.16
 

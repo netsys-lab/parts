@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -25,6 +25,11 @@ func RemoveFromSlice(s []int64, i int64) []int64 {
 	return s[:len(s)-1]
 }
 
+func RemoveFromSliceByIndex(s []int64, index int64) []int64 {
+	s[index] = s[len(s)-1]
+	return s[:len(s)-1]
+}
+
 func Max(x, y int) int {
 	if x < y {
 		return y
@@ -40,6 +45,16 @@ func Min(x, y int) int {
 }
 
 func CeilForce(x, y int64) int64 {
+	res := x / y
+	f := float64(x) / float64(y)
+	if f > float64(res) {
+		return res + 1
+	} else {
+		return res
+	}
+}
+
+func CeilForceInt(x, y int) int {
 	res := x / y
 	f := float64(x) / float64(y)
 	if f > float64(res) {

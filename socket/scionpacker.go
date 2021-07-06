@@ -1,4 +1,4 @@
-package packet
+package socket
 
 import (
 	"context"
@@ -20,6 +20,12 @@ import (
 	"github.com/scionproto/scion/go/lib/spath"
 	"github.com/scionproto/scion/go/lib/topology/underlay"
 )
+
+type PacketPacker interface {
+	GetHeaderLen() int
+	Pack([]byte, int) error
+	Unpack([]byte) error
+}
 
 type SCIONPacketPacker struct {
 	DstAddrString   string
@@ -84,7 +90,7 @@ func NewSCIONPacketPacker(dst string, localAddr string, dstPort int) (*SCIONPack
 func (spp *SCIONPacketPacker) GetHeaderLen() int {
 	return len(spp.Header)
 }
-func (spp *SCIONPacketPacker) Pack(buf *[]byte, payloadStart int, payloadLen uint16) {
+func (spp *SCIONPacketPacker) Pack(buf *[]byte, payloadLen uint16) {
 	*buf = append(*buf, spp.Header...)
 	binary.BigEndian.PutUint16((*buf)[6:8], payloadLen)
 	// fmt.Printf("Having payloadLen %d\n", payloadLen)
