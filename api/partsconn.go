@@ -57,14 +57,6 @@ func NewPartsConn(localAddr, remoteAddr string, localStartPort, remoteStartPort 
 	return partsConn
 }
 
-func (b *PartsConn) SetTransportSocketConstructor(cons socket.TransportSocketConstructor) {
-	b.transportSocketConstructor = cons
-}
-
-func (b *PartsConn) SetTransportPackerConstructor(cons socket.TransportPackerConstructor) {
-	b.transportPackerConstructor = cons
-}
-
 func (b *PartsConn) SetMaxSpeed(maxSpeed int64) {
 	b.MaxSpeed = maxSpeed
 }
