@@ -100,6 +100,8 @@ func (sts *SCIONTransportSocket) ReadPart(bc *PartContext) (uint64, error) {
 		n += uint64(bts)
 		bc.OnPartStatusChange(1, bts)
 		// j++
+
+		log.Infof("Received payload at index %v", i)
 	}
 	return n, nil
 }

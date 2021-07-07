@@ -4,6 +4,7 @@ package main
 import (
 	"crypto/md5"
 	"fmt"
+	"github.com/martenwallewein/parts/socket"
 	"io/ioutil"
 	"os"
 
@@ -17,17 +18,19 @@ var isServer bool
 
 var flags = struct {
 	IsServer   bool
-	Config     string
 	InFile     string
 	OutFile    string
 	NumCons    int
 	Hash       string
 	BufferSize int
+	Net        string
+	LocalAddr  string
+	RemoteAddr string
 	tagflag.StartPos
 }{
 	IsServer: true,
-	Config:   "parts.toml",
 	NumCons:  1,
+	Net:      "scion",
 }
 
 func LogFatal(msg string, a ...interface{}) {
@@ -63,9 +66,27 @@ func mainErr() error {
 		buffer = make([]byte, flags.BufferSize)
 	}
 
+	var socketConstructor socket.TransportSocketConstructor
+	var packerConstructor socket.TransportPackerConstructor
+
+	switch flags.Net {
+	case "udp":
+		socketConstructor = func() socket.TransportSocket { return socket.NewUDPTransportSocket() }
+		packerConstructor = func() socket.TransportPacketPacker { return socket.NewUDPTransportPacketPacker() }
+	case "scion":
+		socketConstructor = func() socket.TransportSocket { return socket.NewSCIONTransport() }
+		packerConstructor = func() socket.TransportPacketPacker { return socket.NewSCIONPacketPacker() }
+	}
+
 	if isServer {
 		// partSock := NewPartsSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
-		partSock := api.NewPartsSock("127.0.0.1", "127.0.0.1", 2000, 40000, 51000, 42000, flags.NumCons)
+		partSock := api.NewPartsSock(
+			flags.LocalAddr, flags.RemoteAddr,
+			52000, 40000, 51000, 42000,
+			flags.NumCons,
+			socketConstructor,
+			packerConstructor,
+		)
 		partSock.Listen()
 		fmt.Println(len(buffer))
 		log.Infof("Before receiving, buffer md5 %x", md5.Sum(buffer))
@@ -81,8 +102,14 @@ func mainErr() error {
 		// err := ioutil.WriteFile(flags.OutFile, buffer, 777)
 		// Check(err)
 	} else {
-		fmt.Println(len(buffer))
-		partSock := api.NewPartsSock("127.0.0.1", "127.0.0.1", 40000, 52000, 42000, 51000, flags.NumCons)
+		log.Infof("Client md5: %x", md5.Sum(buffer))
+		log.Infof("Buffer len: %v", len(buffer))
+		partSock := api.NewPartsSock(
+			flags.LocalAddr, flags.RemoteAddr,
+			40000, 52000, 42000, 51000,
+			flags.NumCons,
+			socketConstructor, packerConstructor,
+		)
 		partSock.Dial()
 		// go partSock.WritePart(file[:halfLen])
 		// time.Sleep(10 * time.Millisecond)
