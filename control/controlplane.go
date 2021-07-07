@@ -1,7 +1,6 @@
 package control
 
 import (
-	"fmt"
 	"net"
 
 	"github.com/martenwallewein/parts/socket"
@@ -17,21 +16,30 @@ type ControlPlane struct {
 	localCtrlAddr string
 	ControlSocket socket.TransportSocket
 	Peers         []ControlPeer
+
+	transportSocketConstructor socket.TransportSocketConstructor
+	transportPackerConstructor socket.TransportPackerConstructor
 }
 
-func NewControlPlane(localCtrlPort int, remoteCtrlPort int, remoteCtrlAddr string, localCtrlAddr string) (*ControlPlane, error) {
+func NewControlPlane(
+	localCtrlPort int, remoteCtrlPort int, localCtrlAddr string, remoteCtrlAddr string,
+	transportSocketConstructor socket.TransportSocketConstructor,
+	transportPackerConstructor socket.TransportPackerConstructor,
+) (*ControlPlane, error) {
 	// Make that thing Transport safe
 	cp := ControlPlane{
 		localCtrlPort: localCtrlPort,
 		localCtrlAddr: localCtrlAddr,
 		Peers:         make([]ControlPeer, 0),
+		transportPackerConstructor: transportPackerConstructor,
+		transportSocketConstructor: transportSocketConstructor,
 	}
-	sock := socket.NewUDPTransportSocket()
-	err := sock.Listen(fmt.Sprintf("%s:%d", localCtrlAddr, localCtrlPort))
+	sock := cp.transportSocketConstructor()
+	err := sock.Listen(localCtrlAddr, localCtrlPort)
 	if err != nil {
 		return nil, err
 	}
-	err = sock.Dial(fmt.Sprintf("%s:%d", remoteCtrlAddr, remoteCtrlPort))
+	err = sock.Dial(remoteCtrlAddr, remoteCtrlPort)
 	if err != nil {
 		return nil, err
 	}

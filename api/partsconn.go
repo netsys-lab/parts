@@ -15,49 +15,53 @@ import (
 
 type PartsConn struct {
 	sync.Mutex
-	part                        []byte
-	PartId                      int64
-	localAddr                   string
-	remoteAddr                  string
-	localStartPort              int
-	remoteStartPort             int
-	lastRequestedSequenceIndex  []int64
-	retransferPackets           [][]byte
-	missingSequenceNums         []int64
-	mode                        int
-	Metrics                     partmetrics.SocketMetrics
-	TransportSocket             socket.TransportSocket
-	ControlPlane                *control.ControlPlane
-	partContext                 *socket.PartContext
-	TestingMode                 bool
-	transportSocketContstructor TransportSocketContstructor
-	transportPackerConstructor  TransportPackerContstructor
-	MaxSpeed                    int64
+	part                       []byte
+	PartId                     int64
+	localAddr                  string
+	remoteAddr                 string
+	localStartPort             int
+	remoteStartPort            int
+	lastRequestedSequenceIndex []int64
+	retransferPackets          [][]byte
+	missingSequenceNums        []int64
+	mode                       int
+	Metrics                    partmetrics.SocketMetrics
+	TransportSocket            socket.TransportSocket
+	ControlPlane               *control.ControlPlane
+	partContext                *socket.PartContext
+	TestingMode                bool
+	transportSocketConstructor socket.TransportSocketConstructor
+	transportPackerConstructor socket.TransportPackerConstructor
+	MaxSpeed                   int64
 }
 
-func NewPartsConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int, controlPlane *control.ControlPlane) *PartsConn {
+func NewPartsConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int,
+	controlPlane *control.ControlPlane,
+	transportSocketConstructor socket.TransportSocketConstructor,
+	transportPackerConstructor socket.TransportPackerConstructor,
+) *PartsConn {
 
 	partsConn := &PartsConn{
-		missingSequenceNums:         make([]int64, 0),
-		localAddr:                   localAddr,
-		remoteAddr:                  remoteAddr,
-		localStartPort:              localStartPort,
-		remoteStartPort:             remoteStartPort,
-		ControlPlane:                controlPlane,
-		transportSocketContstructor: func() socket.TransportSocket { return socket.NewUDPTransportSocket() },
-		transportPackerConstructor:  func() socket.TransportPacketPacker { return socket.NewUDPTransportPacketPacker() },
+		missingSequenceNums:        make([]int64, 0),
+		localAddr:                  localAddr,
+		remoteAddr:                 remoteAddr,
+		localStartPort:             localStartPort,
+		remoteStartPort:            remoteStartPort,
+		ControlPlane:               controlPlane,
+		transportSocketConstructor: transportSocketConstructor,
+		transportPackerConstructor: transportPackerConstructor,
 	}
 
-	partsConn.TransportSocket = partsConn.transportSocketContstructor()
+	partsConn.TransportSocket = partsConn.transportSocketConstructor()
 
 	return partsConn
 }
 
-func (b *PartsConn) SetTransportSocketConstructor(cons TransportSocketContstructor) {
-	b.transportSocketContstructor = cons
+func (b *PartsConn) SetTransportSocketConstructor(cons socket.TransportSocketConstructor) {
+	b.transportSocketConstructor = cons
 }
 
-func (b *PartsConn) SetTransportPackerConstructor(cons TransportPackerContstructor) {
+func (b *PartsConn) SetTransportPackerConstructor(cons socket.TransportPackerConstructor) {
 	b.transportPackerConstructor = cons
 }
 
@@ -90,8 +94,8 @@ func (b *PartsConn) WritePart(part []byte, partId int64) {
 	}
 	b.partContext = &partContext
 	partContext.Prepare()
-	b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
-	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
+	b.TransportSocket.Listen(b.localAddr, b.localStartPort)
+	b.TransportSocket.Dial(b.remoteAddr, b.remoteStartPort)
 
 	log.Infof("Writing %d packets", partContext.NumPackets)
 	// b.packets[b.activePartCount] = make([][]byte, len(part)/PACKET_SIZE)
@@ -122,12 +126,12 @@ func (b *PartsConn) ReadPart(part []byte, partId int64) {
 	}
 	b.partContext = &partContext
 	partContext.Prepare()
-	err := b.TransportSocket.Listen(fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
+	err := b.TransportSocket.Listen(b.localAddr, b.localStartPort)
 	if err != nil {
 		log.Infof("Failed to listen on %s", fmt.Sprintf("%s:%d", b.localAddr, b.localStartPort))
 		log.Fatal(err)
 	}
-	b.TransportSocket.Dial(fmt.Sprintf("%s:%d", b.remoteAddr, b.remoteStartPort))
+	b.TransportSocket.Dial(b.remoteAddr, b.remoteStartPort)
 	// TODO: This assumption here is bullshit, we need to read part size from first packet of part id
 	// TODO: How to ensure order of parallel sent parts? Increasing partIds?
 	log.Infof("Receiving %d packets", partContext.NumPackets)

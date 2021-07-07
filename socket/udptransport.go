@@ -1,6 +1,7 @@
 package socket
 
 import (
+	"fmt"
 	"net"
 
 	log "github.com/sirupsen/logrus"
@@ -13,12 +14,17 @@ type UDPTransportSocket struct {
 	PacketBuffer []byte
 }
 
+// Ensuring interface compatability at compile time.
+var _ TransportSocket = &UDPTransportSocket{}
+var _ TransportPacketPacker = &UDPPacketPacker{}
+
 func NewUDPTransportSocket() *UDPTransportSocket {
 	return &UDPTransportSocket{}
 }
 
-func (uts *UDPTransportSocket) Listen(addr string) error {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+func (uts *UDPTransportSocket) Listen(addr string, port int) error {
+	addrStr := fmt.Sprintf("%s:%d", addr, port)
+	udpAddr, err := net.ResolveUDPAddr("udp", addrStr)
 	if err != nil {
 		return err
 	}
@@ -81,8 +87,9 @@ func (uts *UDPTransportSocket) ReadPart(bc *PartContext) (uint64, error) {
 	return n, nil
 }
 
-func (uts *UDPTransportSocket) Dial(addr string) error {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+func (uts *UDPTransportSocket) Dial(addr string, port int) error {
+	addrStr := fmt.Sprintf("%s:%d", addr, port)
+	udpAddr, err := net.ResolveUDPAddr("udp", addrStr)
 	if err != nil {
 		return err
 	}

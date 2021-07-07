@@ -26,8 +26,6 @@ const (
 	MODE_DONE          = 3
 )
 
-type TransportSocketContstructor func() socket.TransportSocket
-type TransportPackerContstructor func() socket.TransportPacketPacker
 
 type PartsSock struct {
 	sync.Mutex
@@ -35,23 +33,29 @@ type PartsSock struct {
 	localAddr                   string
 	remoteAddr                  string
 	localStartPort              int
-	remoteStartPort             int
-	udpCons                     []net.Conn
-	ctrlConn                    *net.UDPConn
-	modes                       []int
-	partConns                   []*PartsConn
-	controlPlane                *control.ControlPlane
-	acivePartIndex              int
-	Metrics                     *partmetrics.Metrics
-	lastPartRequestPacket       *socket.PartRequestPacket
-	testingMode                 bool
-	transportSocketContstructor TransportSocketContstructor
-	transportPackerConstructor  TransportPackerContstructor
-	MaxSpeed                    int64
-	NumCons                     int
+	remoteStartPort            int
+	udpCons                    []net.Conn
+	ctrlConn                   *net.UDPConn
+	modes                      []int
+	partConns                  []*PartsConn
+	controlPlane               *control.ControlPlane
+	acivePartIndex             int
+	Metrics                    *partmetrics.Metrics
+	lastPartRequestPacket      *socket.PartRequestPacket
+	testingMode                bool
+	transportSocketConstructor socket.TransportSocketConstructor
+	transportPackerConstructor socket.TransportPackerConstructor
+	MaxSpeed                   int64
+	NumCons                    int
 }
 
-func NewPartsSock(localAddr, remoteAddr string, localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int, numCons int) *PartsSock {
+func NewPartsSock(
+	localAddr, remoteAddr string,
+	localStartPort, remoteStartPort, localCtrlPort, remoteCtrlPort int,
+	numCons int,
+	transportSocketConstructor socket.TransportSocketConstructor,
+	transportPackerConstructor socket.TransportPackerConstructor,
+) *PartsSock {
 	partSock := &PartsSock{
 		localAddr:       localAddr,
 		remoteAddr:      remoteAddr,
@@ -61,16 +65,27 @@ func NewPartsSock(localAddr, remoteAddr string, localStartPort, remoteStartPort,
 		partConns:       make([]*PartsConn, 0),
 		acivePartIndex:  0,
 		NumCons:         numCons,
+		transportSocketConstructor: transportSocketConstructor,
+		transportPackerConstructor: transportPackerConstructor,
 	}
 	var err error
-	partSock.controlPlane, err = control.NewControlPlane(localCtrlPort, remoteCtrlPort, localAddr, remoteAddr)
+	partSock.controlPlane, err = control.NewControlPlane(
+		localCtrlPort, remoteCtrlPort, localAddr, remoteAddr,
+		transportSocketConstructor,
+		transportPackerConstructor,
+	)
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	for i := range partSock.modes {
-		conn := NewPartsConn(localAddr, remoteAddr, localStartPort+i, remoteStartPort+i, nil)
-		conn.ControlPlane = partSock.controlPlane
+		conn := NewPartsConn(
+			localAddr, remoteAddr, localStartPort+i, remoteStartPort+i,
+			partSock.controlPlane,
+			transportSocketConstructor,
+			transportPackerConstructor,
+		)
 		partSock.partConns = append(partSock.partConns, conn)
 
 	}
@@ -90,20 +105,6 @@ func NewPartsSock(localAddr, remoteAddr string, localStartPort, remoteStartPort,
 }
 func (b *PartsSock) SetMaxSpeed(maxSpeed int64) {
 	b.MaxSpeed = maxSpeed
-}
-
-func (b *PartsSock) SetTransportSocketConstructor(cons TransportSocketContstructor) {
-	b.transportSocketContstructor = cons
-	for _, v := range b.partConns {
-		v.SetTransportSocketConstructor(cons)
-	}
-}
-
-func (b *PartsSock) SetTransportPackerConstructor(cons TransportPackerContstructor) {
-	b.transportPackerConstructor = cons
-	for _, v := range b.partConns {
-		v.SetTransportPackerConstructor(cons)
-	}
 }
 
 func (b *PartsSock) EnableTestingMode() {

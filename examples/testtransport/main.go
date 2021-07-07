@@ -13,8 +13,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var socketConstructor api.TransportSocketContstructor
-var packerConstructor api.TransportPackerContstructor
+var socketConstructor socket.TransportSocketConstructor
+var packerConstructor socket.TransportPackerConstructor
 
 var flags = struct {
 	IsServer   bool
@@ -56,17 +56,26 @@ func mainErr() error {
 	Check(err)
 	buffer := make([]byte, len(file))
 
-	// TODO: Add SCION here...
+	log.Infof("net=%v", flags.Net)
 	switch flags.Net {
 	case "udp":
 		socketConstructor = func() socket.TransportSocket { return socket.NewUDPTransportSocket() }
 		packerConstructor = func() socket.TransportPacketPacker { return socket.NewUDPTransportPacketPacker() }
+	case "scion":
+		socketConstructor = func() socket.TransportSocket { return socket.NewSCIONTransport() }
+		packerConstructor = func() socket.TransportPacketPacker { return socket.NewSCIONPacketPacker() }
 	}
 
 	var wg sync.WaitGroup
 	log.Infof("Starting testtransport")
 	log.Infof("Creating server")
-	partSockServer := api.NewPartsSock(flags.LocalAddr, flags.RemoteAddr, 52000, 40000, 51000, 42000, 1)
+	partSockServer := api.NewPartsSock(
+		flags.LocalAddr, flags.RemoteAddr,
+		52000, 40000, 51000, 42000,
+		1,
+		socketConstructor, packerConstructor,
+	)
+
 	partSockServer.Listen()
 	partSockServer.EnableTestingMode()
 	wg.Add(1)
@@ -83,9 +92,15 @@ func mainErr() error {
 
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
-		partSockServer.EnableTestingMode()
 		log.Infof("Creating client")
-		partSockClient := api.NewPartsSock(flags.RemoteAddr, flags.LocalAddr, 40000, 52000, 42000, 51000, 1)
+		partSockClient := api.NewPartsSock(
+			flags.RemoteAddr, flags.LocalAddr,
+			40000, 52000, 42000, 51000,
+			1,
+			socketConstructor, packerConstructor,
+		)
+		partSockClient.EnableTestingMode()
+
 		partSockClient.Dial()
 		partSockClient.EnableTestingMode()
 		partSockClient.WritePart(file)

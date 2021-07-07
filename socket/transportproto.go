@@ -18,7 +18,7 @@ type OnPartStatusChange func(numMsgs int, completedBytes int)
 
 type TransportSocket interface {
 	// Opens a socket for the transport protocol
-	Listen(addr string) error
+	Listen(addr string, port int) error
 	// Writes the complete part from partContext.Data in the way this interface likes to
 	// Its recommended to send packets from begin to end, because
 	// at the moment the retransfer logic relies on that.
@@ -34,7 +34,7 @@ type TransportSocket interface {
 	// Reads a packet from the remtoeAddr. Needs to remove the transport header.
 	Read(buf []byte) (int, error)
 	// Connects to the addr, so all WritePart and Write calls send to this destination
-	Dial(addr string) error
+	Dial(addr string, port int) error
 }
 
 type TransportPacketPacker interface {
@@ -49,3 +49,6 @@ type TransportPacketPacker interface {
 	// Remove the header from the buf and return only payload
 	Unpack(buf *[]byte) error
 }
+
+type TransportSocketConstructor func() TransportSocket
+type TransportPackerConstructor func() TransportPacketPacker

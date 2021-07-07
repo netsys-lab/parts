@@ -65,7 +65,7 @@ func mainErr() error {
 
 	if isServer {
 		// partSock := NewPartsSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
-		partSock := api.NewPartsSock("127.0.0.1", "127.0.0.1", 52000, 40000, 51000, 42000, flags.NumCons)
+		partSock := api.NewPartsSock("127.0.0.1", "127.0.0.1", 2000, 40000, 51000, 42000, flags.NumCons)
 		partSock.Listen()
 		fmt.Println(len(buffer))
 		log.Infof("Before receiving, buffer md5 %x", md5.Sum(buffer))
