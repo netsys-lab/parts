@@ -26,13 +26,12 @@ const (
 	MODE_DONE          = 3
 )
 
-
 type PartsSock struct {
 	sync.Mutex
-	activePartCount             int
-	localAddr                   string
-	remoteAddr                  string
-	localStartPort              int
+	activePartCount            int
+	localAddr                  string
+	remoteAddr                 string
+	localStartPort             int
 	remoteStartPort            int
 	udpCons                    []net.Conn
 	ctrlConn                   *net.UDPConn
@@ -57,14 +56,14 @@ func NewPartsSock(
 	transportPackerConstructor socket.TransportPackerConstructor,
 ) *PartsSock {
 	partSock := &PartsSock{
-		localAddr:       localAddr,
-		remoteAddr:      remoteAddr,
-		localStartPort:  localStartPort,
-		remoteStartPort: remoteStartPort,
-		modes:           make([]int, numCons),
-		partConns:       make([]*PartsConn, 0),
-		acivePartIndex:  0,
-		NumCons:         numCons,
+		localAddr:                  localAddr,
+		remoteAddr:                 remoteAddr,
+		localStartPort:             localStartPort,
+		remoteStartPort:            remoteStartPort,
+		modes:                      make([]int, numCons),
+		partConns:                  make([]*PartsConn, 0),
+		acivePartIndex:             0,
+		NumCons:                    numCons,
 		transportSocketConstructor: transportSocketConstructor,
 		transportPackerConstructor: transportPackerConstructor,
 	}
@@ -105,6 +104,9 @@ func NewPartsSock(
 }
 func (b *PartsSock) SetMaxSpeed(maxSpeed int64) {
 	b.MaxSpeed = maxSpeed
+	for _, v := range b.partConns {
+		v.MaxSpeed = maxSpeed
+	}
 }
 
 func (b *PartsSock) EnableTestingMode() {

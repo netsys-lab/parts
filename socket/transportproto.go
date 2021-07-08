@@ -48,6 +48,8 @@ type TransportPacketPacker interface {
 	Pack(buf *[]byte, payloadLen int) error
 	// Remove the header from the buf and return only payload
 	Unpack(buf *[]byte) error
+	SetRemote(remoteAddr string, remotePort int)
+	SetLocal(localAddr string, localPort int)
 }
 
 type TransportSocketConstructor func() TransportSocket

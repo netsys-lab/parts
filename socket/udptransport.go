@@ -115,6 +115,14 @@ func (up *UDPPacketPacker) GetHeaderLen() int {
 	return 0
 }
 
+func (up *UDPPacketPacker) SetRemote(_ string, _ int) {
+
+}
+
+func (up *UDPPacketPacker) SetLocal(_ string, _ int) {
+
+}
+
 func (up *UDPPacketPacker) Pack(buf *[]byte, payloadLen int) error {
 	return nil
 }

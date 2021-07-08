@@ -18,7 +18,7 @@ import (
 //   }
 //   return 0;
 //}
-import "C"
+// import "C"
 
 const (
 	MAX_SLOW_START_ITERATIONS = 3
@@ -70,8 +70,9 @@ func (rc *RateControl) Add(numPackets int, numBytes int64) {
 	rc.LastPacketTime = time.Now()*/
 
 	if rc.LastIntervalPackets%100 == 0 && rc.AveragePacketWaitingTime != 0 {
-		//time.Sleep(rc.AveragePacketWaitingTime)
-		C.sleep(C.int(rc.AveragePacketWaitingTime * 100))
+		time.Sleep(rc.AveragePacketWaitingTime * 100)
+		// TODO: ENable rate control
+		// C.sleep(C.int(rc.AveragePacketWaitingTime * 100))
 	}
 
 }

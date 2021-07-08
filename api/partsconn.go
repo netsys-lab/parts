@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/gob"
 	"fmt"
 	"sync"
@@ -84,11 +85,12 @@ func (b *PartsConn) WritePart(part []byte, partId int64) {
 		},
 		TestingMode: b.TestingMode,
 	}
+	partContext.TransportPacketPacker.SetLocal(b.localAddr, b.localStartPort)
+	partContext.TransportPacketPacker.SetRemote(b.remoteAddr, b.remoteStartPort)
 	b.partContext = &partContext
-	partContext.Prepare()
 	b.TransportSocket.Listen(b.localAddr, b.localStartPort)
 	b.TransportSocket.Dial(b.remoteAddr, b.remoteStartPort)
-
+	partContext.Prepare()
 	log.Infof("Writing %d packets", partContext.NumPackets)
 	// b.packets[b.activePartCount] = make([][]byte, len(part)/PACKET_SIZE)
 	// TODO: Waiting queue
@@ -116,6 +118,8 @@ func (b *PartsConn) ReadPart(part []byte, partId int64) {
 		OnPartStatusChange:    func(numMsg int, bytes int) {},
 		TestingMode:           b.TestingMode,
 	}
+	partContext.TransportPacketPacker.SetLocal(b.localAddr, b.localStartPort)
+	partContext.TransportPacketPacker.SetRemote(b.remoteAddr, b.remoteStartPort)
 	b.partContext = &partContext
 	partContext.Prepare()
 	err := b.TransportSocket.Listen(b.localAddr, b.localStartPort)
@@ -133,7 +137,7 @@ func (b *PartsConn) ReadPart(part []byte, partId int64) {
 	// TODO: Can not put this into struct for whatever reason
 
 	b.TransportSocket.ReadPart(&partContext)
-	log.Infof("Received %d packets, partLen %d", partContext.NumPackets, len(part))
+	log.Infof("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(part), md5.Sum(part))
 	// log.Info(part[len(part)-1000:])
 	// copy(part, partContext.Data)
 }
@@ -154,15 +158,15 @@ func (b *PartsConn) retransferMissingPackets() {
 
 				// TODO: How to get already cached packet here, otherwise at least payload
 				packet := b.partContext.GetPayloadByPacketIndex(int(v) + j - 1)
-				buf := make([]byte, len(packet)+b.partContext.HeaderLength)
-				copy(buf[b.partContext.HeaderLength:], packet)
+				buf := make([]byte, len(packet)+b.partContext.PartsPacketPacker.GetHeaderLen())
+				copy(buf[b.partContext.PartsPacketPacker.GetHeaderLen():], packet)
 				// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
 				b.partContext.SerializeRetransferPacket(&buf, v)
 				// log.Infof("Retransfer sequenceNum %d", v)
 				bts, err := (b.TransportSocket).Write(buf)
 				b.Metrics.TxBytes += uint64(bts)
 				b.Metrics.TxPackets += 1
-				// time.Sleep(1 * time.Microsecond)
+				time.Sleep(1 * time.Microsecond)
 				if err != nil {
 					log.Fatal("error:", err)
 				}

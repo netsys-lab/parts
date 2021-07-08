@@ -4,9 +4,10 @@ package main
 import (
 	"crypto/md5"
 	"fmt"
-	"github.com/martenwallewein/parts/socket"
 	"io/ioutil"
 	"os"
+
+	"github.com/martenwallewein/parts/socket"
 
 	"github.com/anacrolix/tagflag"
 	"github.com/martenwallewein/parts/api"
@@ -82,7 +83,7 @@ func mainErr() error {
 		// partSock := NewPartsSock("19-ffaa:1:c3f,[10.0.0.2]", "19-ffaa:1:cf0,[10.0.0.1]", 52000, 40000, 51000, 42000)
 		partSock := api.NewPartsSock(
 			flags.LocalAddr, flags.RemoteAddr,
-			52000, 40000, 51000, 42000,
+			62000, 40000, 61000, 42000,
 			flags.NumCons,
 			socketConstructor,
 			packerConstructor,
@@ -102,14 +103,15 @@ func mainErr() error {
 		// err := ioutil.WriteFile(flags.OutFile, buffer, 777)
 		// Check(err)
 	} else {
-		log.Infof("Client md5: %x", md5.Sum(buffer))
-		log.Infof("Buffer len: %v", len(buffer))
+		log.Infof("Client md5: %x", md5.Sum(file))
+		log.Infof("Buffer len: %v", len(file))
 		partSock := api.NewPartsSock(
 			flags.LocalAddr, flags.RemoteAddr,
-			40000, 52000, 42000, 51000,
+			40000, 62000, 42000, 61000,
 			flags.NumCons,
 			socketConstructor, packerConstructor,
 		)
+		partSock.SetMaxSpeed(1000000000)
 		partSock.Dial()
 		// go partSock.WritePart(file[:halfLen])
 		// time.Sleep(10 * time.Millisecond)

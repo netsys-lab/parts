@@ -154,14 +154,12 @@ func (b *PartContext) SerializePacket(packetBuffer *[]byte) {
 
 	b.PartsPacketPacker.Pack(packetBuffer, b)
 	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.PartsPacketPacker.GetHeaderLen())
-	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.PartsPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
+	// log.Infof("Send md5 for %x sequeceNumber %d and len %d", md5.Sum((*packetBuffer)), b.currentSequenceNumber, len((*packetBuffer)))
 }
 
 func (b *PartContext) SerializeRetransferPacket(packetBuffer *[]byte, sequenceNum int64) {
-
 	b.PartsPacketPacker.PackRetransfer(packetBuffer, sequenceNum, b)
 	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.PartsPacketPacker.GetHeaderLen())
-	// log.Infof("Send md5 for %x sequeceNumber %d", md5.Sum((*packetBuffer)[b.PartsPacketPacker.GetHeaderLen():]), b.currentSequenceNumber)
 }
 
 func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
@@ -170,7 +168,7 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 	b.TransportPacketPacker.Unpack(packetBuffer)
 	p, _ := b.PartsPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
 	diff := p.SequenceNumber - b.HighestSequenceNumber
-	// log.Infof("Got md5 for %x sequeceNumber %d", md5.Sum(*packetBuffer), b.highestSequenceNumber)
+	// log.Infof("Got md5 for Payload %x ", md5.Sum((*packetBuffer)[:1320]))
 	// log.Infof("Received SequenceNumber %d", p.SequenceNumber)
 	if diff > 1 {
 		// var off int64 = 1
@@ -204,6 +202,8 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 	partStart := int(p.SequenceNumber-1) * b.PayloadLength
 	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
 	copy(b.Data[partStart:end], *packetBuffer)
+	// log.Infof("Copied %d bytes from %d to %d with payloadlen %d, md5 %x", len(b.Data[partStart:end]), partStart, end, b.PayloadLength, md5.Sum(b.Data[partStart:end]))
+	// os.Exit(1)
 	if diff > 0 {
 		b.HighestSequenceNumber += diff
 	}
