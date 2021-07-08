@@ -249,6 +249,8 @@ func (b *PartsSock) collectRetransfers() {
 			log.Fatal("encode error:", err)
 		}
 
+		// log.Info(p)
+
 		// log.Infof("Got PartRequestPacket with maxSequenceNumber %d, %d missingNums and partId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.PartId)
 		// TODO: Add to retransfers
 		partsConn := b.partConns[(p.PartId-1)%int64(b.NumCons)]
@@ -298,6 +300,7 @@ func (b *PartsSock) requestRetransfers() {
 					min := utils.Min(start+missingNumsPerPacket, len(partsConn.partContext.MissingSequenceNums))
 					var network bytes.Buffer        // Stand-in for a network connection
 					enc := gob.NewEncoder(&network) // Will write to network.
+					log.Infof("Requesting from %d to %d having %d (%d)", start, min, len(partsConn.partContext.MissingSequenceNums), partsConn.partContext.MissingSequenceNums)
 					p := socket.PartRequestPacket{
 						PartId:                       partsConn.PartId,
 						LastSequenceNumber:           partsConn.partContext.HighestSequenceNumber,
@@ -305,6 +308,8 @@ func (b *PartsSock) requestRetransfers() {
 						MissingSequenceNumberOffsets: (partsConn.partContext.MissingSequenceNumOffsets)[start:min],
 						TransactionId:                txId,
 					}
+					// log.Info("PACKET")
+					// log.Info(p)
 
 					err := enc.Encode(p)
 					if err != nil {
@@ -323,6 +328,7 @@ func (b *PartsSock) requestRetransfers() {
 
 					// log.Infof("Wrote %d ctrl bytes to client", bts)
 					missingNumIndex += min
+					start += min
 				}
 			}
 

@@ -160,8 +160,8 @@ func (b *PartsConn) retransferMissingPackets() {
 				packet := b.partContext.GetPayloadByPacketIndex(int(v) + j - 1)
 				buf := make([]byte, len(packet)+b.partContext.PartsPacketPacker.GetHeaderLen())
 				copy(buf[b.partContext.PartsPacketPacker.GetHeaderLen():], packet)
-				// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v)
-				b.partContext.SerializeRetransferPacket(&buf, v)
+				// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v+int64(j))
+				b.partContext.SerializeRetransferPacket(&buf, v+int64(j))
 				// log.Infof("Retransfer sequenceNum %d", v)
 				bts, err := (b.TransportSocket).Write(buf)
 				b.Metrics.TxBytes += uint64(bts)
@@ -175,9 +175,10 @@ func (b *PartsConn) retransferMissingPackets() {
 		}
 		b.partContext.Lock()
 		b.partContext.MissingSequenceNums = make([]int64, 0)
-		// log.Infof("Resetting retransfers")
+		b.partContext.MissingSequenceNumOffsets = make([]int64, 0)
+		log.Infof("Resetting retransfers")
 		b.partContext.Unlock()
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 	}
 }
 

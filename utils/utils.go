@@ -26,8 +26,10 @@ func RemoveFromSlice(s []int64, i int64) []int64 {
 }
 
 func RemoveFromSliceByIndex(s []int64, index int64) []int64 {
-	s[index] = s[len(s)-1]
-	return s[:len(s)-1]
+	// TODO: Optimization?
+	return append(s[:index], s[index+1:]...)
+	// s[index] = s[len(s)-1]
+	// return s[:len(s)-1]
 }
 
 func Max(x, y int) int {

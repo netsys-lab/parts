@@ -187,12 +187,19 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 	} else if diff < 0 {
 		// retransfer = true
 		// log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
-		// log.Infof("Received md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
+		// log.Infof("Received retransfer md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
 		b.Lock()
 		index := utils.IndexOf(p.SequenceNumber, b.MissingSequenceNums)
 		if index >= 0 {
-			b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
-			b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
+			b.MissingSequenceNums[index]++
+			b.MissingSequenceNumOffsets[index]--
+			if b.MissingSequenceNumOffsets[index] == 0 {
+				// log.Warnf("Removing offset from missingNumbers at index %d", index)
+				b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
+				b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
+			}
+		} else {
+			log.Errorf("Got retransfer packet for sequenceNumber %d that was not handled properly", p.SequenceNumber)
 		}
 
 		b.Unlock()
