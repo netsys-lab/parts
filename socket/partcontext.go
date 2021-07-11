@@ -2,6 +2,7 @@ package socket
 
 import (
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -188,21 +189,24 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 		// retransfer = true
 		// log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
 		// log.Infof("Received retransfer md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
-		b.Lock()
-		index := utils.IndexOf(p.SequenceNumber, b.MissingSequenceNums)
+
+		index := utils.IndexOfMin(p.SequenceNumber, b.MissingSequenceNums)
 		if index >= 0 {
-			b.MissingSequenceNums[index]++
+			b.Lock()
+			// b.MissingSequenceNums[index]++
 			b.MissingSequenceNumOffsets[index]--
 			if b.MissingSequenceNumOffsets[index] == 0 {
 				// log.Warnf("Removing offset from missingNumbers at index %d", index)
 				b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
 				b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
 			}
+			b.Unlock()
 		} else {
 			log.Errorf("Got retransfer packet for sequenceNumber %d that was not handled properly", p.SequenceNumber)
+			log.Error(b.MissingSequenceNums)
+			log.Error(b.MissingSequenceNumOffsets)
+			os.Exit(1)
 		}
-
-		b.Unlock()
 
 	}
 
@@ -212,6 +216,6 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 	// log.Infof("Copied %d bytes from %d to %d with payloadlen %d, md5 %x", len(b.Data[partStart:end]), partStart, end, b.PayloadLength, md5.Sum(b.Data[partStart:end]))
 	// os.Exit(1)
 	if diff > 0 {
-		b.HighestSequenceNumber += diff
+		b.HighestSequenceNumber = p.SequenceNumber // +=diff
 	}
 }

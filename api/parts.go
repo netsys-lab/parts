@@ -84,6 +84,7 @@ func NewPartsSock(
 			partSock.controlPlane,
 			transportSocketConstructor,
 			transportPackerConstructor,
+			numCons,
 		)
 		partSock.partConns = append(partSock.partConns, conn)
 
@@ -254,6 +255,7 @@ func (b *PartsSock) collectRetransfers() {
 		// log.Infof("Got PartRequestPacket with maxSequenceNumber %d, %d missingNums and partId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.PartId)
 		// TODO: Add to retransfers
 		partsConn := b.partConns[(p.PartId-1)%int64(b.NumCons)]
+		partsConn.RateControl.AddAckMessage(p)
 		for i, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
 			if b.lastPartRequestPacket != nil && utils.IndexOf(v, b.lastPartRequestPacket.MissingSequenceNumbers) >= 0 {
@@ -277,7 +279,7 @@ func (b *PartsSock) collectRetransfers() {
 }
 
 func (b *PartsSock) requestRetransfers() {
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	done := make(chan bool)
 	// log.Infof("In Call of requestRetransfers %p", missingNums)
 	// log.Infof("In Call of requestRetransfers go routine %p", missingNums)
@@ -291,18 +293,25 @@ func (b *PartsSock) requestRetransfers() {
 				if partsConn.partContext == nil {
 					continue
 				}
+				// If we have no packets received, we dont need to request retransfers
+				if partsConn.partContext.HighestSequenceNumber < 1 {
+					continue
+				}
+
 				missingNumsPerPacket := 200
 				missingNumIndex := 0
 				// log.Infof("Having %d missing Sequence Numbers for con index %d", len(partsConn.partContext.MissingSequenceNums), i)
 				start := 0
-
-				for missingNumIndex < len(partsConn.partContext.MissingSequenceNums) {
+				index := 0
+				for missingNumIndex <= len(partsConn.partContext.MissingSequenceNums) {
 					min := utils.Min(start+missingNumsPerPacket, len(partsConn.partContext.MissingSequenceNums))
 					var network bytes.Buffer        // Stand-in for a network connection
 					enc := gob.NewEncoder(&network) // Will write to network.
-					log.Infof("Requesting from %d to %d having %d (%d)", start, min, len(partsConn.partContext.MissingSequenceNums), partsConn.partContext.MissingSequenceNums)
+					// log.Infof("Requesting from %d to %d having %d (%d), partId %d", start, min, len(partsConn.partContext.MissingSequenceNums), partsConn.partContext.MissingSequenceNums, partsConn.PartId)
 					p := socket.PartRequestPacket{
 						PartId:                       partsConn.PartId,
+						NumPacketsPerTx:              utils.CeilForceInt(len(partsConn.partContext.MissingSequenceNums), missingNumsPerPacket),
+						PacketTxIndex:                index,
 						LastSequenceNumber:           partsConn.partContext.HighestSequenceNumber,
 						MissingSequenceNumbers:       (partsConn.partContext.MissingSequenceNums)[start:min],
 						MissingSequenceNumberOffsets: (partsConn.partContext.MissingSequenceNumOffsets)[start:min],
@@ -310,7 +319,7 @@ func (b *PartsSock) requestRetransfers() {
 					}
 					// log.Info("PACKET")
 					// log.Info(p)
-
+					index++
 					err := enc.Encode(p)
 					if err != nil {
 						log.Fatal("encode error:", err)
@@ -320,7 +329,7 @@ func (b *PartsSock) requestRetransfers() {
 					}*/
 					// log.Infof("Sending missing %d SequenceNums", len(p.MissingSequenceNumbers))
 					_, err = b.controlPlane.Write(network.Bytes())
-					time.Sleep(100 * time.Millisecond)
+					time.Sleep(1 * time.Millisecond)
 					// _, err = (b.ctrlConn).WriteTo(network.Bytes(), b.remoteCtrlAddr)
 					// if err != nil {
 					//	log.Fatal("Write error:", err)
@@ -329,6 +338,10 @@ func (b *PartsSock) requestRetransfers() {
 					// log.Infof("Wrote %d ctrl bytes to client", bts)
 					missingNumIndex += min
 					start += min
+
+					if min == 0 {
+						break
+					}
 				}
 			}
 

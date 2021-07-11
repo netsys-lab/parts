@@ -15,6 +15,27 @@ func IndexOf(element int64, data []int64) int {
 	return -1 //not found.
 }
 
+func IndexOfMin(element int64, data []int64) int {
+	for k, v := range data {
+		if element == v {
+			return k
+		}
+
+		if element > v && len(data) == 1 {
+			return k
+		}
+
+		if element > v && k == len(data)-1 {
+			return k
+		}
+
+		if element > v && k < len(data)-1 && element < data[k+1] {
+			return k
+		}
+	}
+	return -1 //not found.
+}
+
 func RemoveFromSlice(s []int64, i int64) []int64 {
 	index := IndexOf(i, s)
 	if index == -1 {

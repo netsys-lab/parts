@@ -111,7 +111,7 @@ func mainErr() error {
 			flags.NumCons,
 			socketConstructor, packerConstructor,
 		)
-		partSock.SetMaxSpeed(2000000000)
+		// partSock.SetMaxSpeed(2000000000)
 		partSock.Dial()
 		// go partSock.WritePart(file[:halfLen])
 		// time.Sleep(10 * time.Millisecond)

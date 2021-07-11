@@ -85,6 +85,7 @@ func (sts *SCIONTransportSocket) WritePart(bc *PartContext) (uint64, error) {
 	for i := 0; i < bc.NumPackets; i++ {
 		// start := i * bc.MaxPacketLength
 		// packetBuffer := buffer[start : start+bc.MaxPacketLength]
+		// log.Infof("Write on %d", bc.PartId)
 		payload := bc.GetPayloadByPacketIndex(i)
 		buf := make([]byte, len(payload)+bc.PartsPacketPacker.GetHeaderLen())
 		// log.Infof("Copy %d bytes to packetbuffer %d with md5 %x", len(payload), len(buf), md5.Sum(payload))

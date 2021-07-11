@@ -34,12 +34,15 @@ type PartsConn struct {
 	transportSocketConstructor socket.TransportSocketConstructor
 	transportPackerConstructor socket.TransportPackerConstructor
 	MaxSpeed                   int64
+	RateControl                *control.RateControl
+	NumCons                    int
 }
 
 func NewPartsConn(localAddr, remoteAddr string, localStartPort, remoteStartPort int,
 	controlPlane *control.ControlPlane,
 	transportSocketConstructor socket.TransportSocketConstructor,
 	transportPackerConstructor socket.TransportPackerConstructor,
+	numCons int,
 ) *PartsConn {
 
 	partsConn := &PartsConn{
@@ -51,9 +54,17 @@ func NewPartsConn(localAddr, remoteAddr string, localStartPort, remoteStartPort 
 		ControlPlane:               controlPlane,
 		transportSocketConstructor: transportSocketConstructor,
 		transportPackerConstructor: transportPackerConstructor,
+		NumCons:                    numCons,
 	}
 
 	partsConn.TransportSocket = partsConn.transportSocketConstructor()
+
+	partsConn.RateControl = control.NewRateControl(
+		100,
+		partsConn.MaxSpeed,
+		PACKET_SIZE,
+		numCons,
+	)
 
 	return partsConn
 }
@@ -65,13 +76,7 @@ func (b *PartsConn) SetMaxSpeed(maxSpeed int64) {
 func (b *PartsConn) WritePart(part []byte, partId int64) {
 	// TODO: Save activePartCount and increase immediatly
 	// TODO: Not overwrite if actually sending
-
-	rc := control.NewRateControl(
-		100,
-		b.MaxSpeed,
-		PACKET_SIZE,
-	)
-
+	b.PartId = partId
 	partContext := socket.PartContext{
 		PartsPacketPacker:     socket.NewBinaryPartsPacketPacker(),
 		TransportPacketPacker: b.transportPackerConstructor(),
@@ -80,11 +85,13 @@ func (b *PartsConn) WritePart(part []byte, partId int64) {
 		Data:                  part,
 		OnPartStatusChange: func(numMsg int, bytes int) {
 			if !b.TestingMode {
-				rc.Add(numMsg, int64(bytes))
+				// log.Infof("Print on PartsConn %d", b.PartId)
+				b.RateControl.Add(numMsg, int64(bytes))
 			}
 		},
 		TestingMode: b.TestingMode,
 	}
+	b.RateControl.Start()
 	partContext.TransportPacketPacker.SetLocal(b.localAddr, b.localStartPort)
 	partContext.TransportPacketPacker.SetRemote(b.remoteAddr, b.remoteStartPort)
 	b.partContext = &partContext
@@ -96,10 +103,11 @@ func (b *PartsConn) WritePart(part []byte, partId int64) {
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	b.mode = MODE_SENDING
-	rc.Start()
+	// b.RateControl.Start()
 	b.TransportSocket.WritePart(&partContext)
 	log.Infof("Wrote %d packets, partLen %d", partContext.NumPackets, len(part))
 	// log.Info(part[len(part)-1000:])
+	b.RateControl.Stop()
 	b.mode = MODE_RETRANSFER
 	b.retransferMissingPackets()
 	time.Sleep(100 * time.Second)
@@ -166,7 +174,7 @@ func (b *PartsConn) retransferMissingPackets() {
 				bts, err := (b.TransportSocket).Write(buf)
 				b.Metrics.TxBytes += uint64(bts)
 				b.Metrics.TxPackets += 1
-				time.Sleep(1 * time.Microsecond)
+				time.Sleep(10 * time.Microsecond)
 				if err != nil {
 					log.Fatal("error:", err)
 				}
@@ -176,7 +184,7 @@ func (b *PartsConn) retransferMissingPackets() {
 		b.partContext.Lock()
 		b.partContext.MissingSequenceNums = make([]int64, 0)
 		b.partContext.MissingSequenceNumOffsets = make([]int64, 0)
-		log.Infof("Resetting retransfers")
+		// log.Infof("Resetting retransfers")
 		b.partContext.Unlock()
 		time.Sleep(300 * time.Millisecond)
 	}

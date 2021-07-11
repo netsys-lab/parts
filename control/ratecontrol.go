@@ -3,6 +3,9 @@ package control
 import (
 	"sync"
 	"time"
+
+	"github.com/martenwallewein/parts/socket"
+	log "github.com/sirupsen/logrus"
 )
 
 // #include <stdio.h>
@@ -26,23 +29,32 @@ const (
 
 type RateControl struct {
 	sync.Mutex
-	TimeInterval             time.Duration
-	LastIntervalPackets      int64
-	LastIntervalBytes        int64
-	MaxSpeed                 int64 // Always bits/s
-	AveragePacketWaitingTime time.Duration
-	LastIntervalWaitingTime  *time.Duration
-	Ticker                   *time.Ticker
-	CtrlChan                 chan bool
-	LastPacketTime           time.Time
-	SlowStartCount           int
-	PacketSize               int
+	TimeInterval                  time.Duration
+	LastIntervalPackets           int64
+	LastIntervalBytes             int64
+	MaxSpeed                      int64 // Always bits/s
+	AveragePacketWaitingTime      time.Duration
+	LastIntervalWaitingTime       *time.Duration
+	Ticker                        *time.Ticker
+	CtrlChan                      chan bool
+	LastPacketTime                time.Time
+	SlowStartCount                int
+	PacketSize                    int
+	DecreaseWaitingTime           int
+	LimitReached                  bool
+	Running                       bool
+	NumReceivedMissingNumbers     int
+	LastNumReceivedMissingNumbers int
+	LastTx                        int64
+	NumPacketsPerTx               int
+	NumCons                       int
 }
 
 func NewRateControl(
 	timeInterval time.Duration,
 	maxSpeed int64,
 	packetSize int,
+	numCons int,
 ) *RateControl {
 	rc := RateControl{
 		TimeInterval:   timeInterval,
@@ -50,17 +62,62 @@ func NewRateControl(
 		CtrlChan:       make(chan bool, 0),
 		SlowStartCount: 0, // The number of iterations until slow start is done
 		PacketSize:     packetSize,
+		NumCons:        numCons,
 	}
 
 	return &rc
 }
 
+func (rc *RateControl) AddAckMessage(msg socket.PartRequestPacket) {
+	// log.Info(msg)
+	if !rc.Running {
+		return
+	}
+
+	if rc.LastTx == msg.TransactionId {
+		if msg.PacketTxIndex == 0 {
+			rc.NumReceivedMissingNumbers = len(msg.MissingSequenceNumbers)
+		} else {
+			rc.NumReceivedMissingNumbers += len(msg.MissingSequenceNumbers)
+		}
+
+		// Last packet per tx means we have all infos available
+		if msg.PacketTxIndex >= msg.NumPacketsPerTx-1 {
+			rc.Recalculate(&msg)
+			rc.LastNumReceivedMissingNumbers = rc.NumReceivedMissingNumbers
+		}
+	} else { // New Transaction
+		rc.LastTx = msg.TransactionId
+		rc.NumReceivedMissingNumbers = len(msg.MissingSequenceNumbers)
+	}
+}
+
+func (rc *RateControl) Recalculate(msg *socket.PartRequestPacket) {
+	// Decrease
+	if (rc.NumReceivedMissingNumbers - 10) > rc.LastNumReceivedMissingNumbers {
+		log.Infof("Run into packet loss, reducing speed")
+		rc.LimitReached = true
+		rc.AveragePacketWaitingTime += time.Duration(rc.DecreaseWaitingTime)
+	} else if rc.NumReceivedMissingNumbers <= 10 && !rc.LimitReached { // Increase
+		if rc.DecreaseWaitingTime > int(rc.AveragePacketWaitingTime) {
+			log.Infof("Having max speed, no rate limit enforced")
+			rc.AveragePacketWaitingTime = 0
+		} else {
+			rc.AveragePacketWaitingTime -= time.Duration(rc.DecreaseWaitingTime)
+			log.Infof("Increasing waiting time speed to %d", rc.AveragePacketWaitingTime)
+		}
+	} else {
+		// log.Infof("Achieved max speed, not rate limit enforced")
+
+	}
+}
+
 func (rc *RateControl) Add(numPackets int, numBytes int64) {
 	rc.LastIntervalBytes = numBytes
 	rc.LastIntervalPackets += int64(numPackets)
-	if rc.MaxSpeed == 0 {
-		return
-	}
+	// if rc.MaxSpeed == 0 {
+	//	return
+	// }
 	/*if rc.LastIntervalWaitingTime != nil {
 		*rc.LastIntervalWaitingTime += time.Since(rc.LastPacketTime)
 	}
@@ -68,9 +125,11 @@ func (rc *RateControl) Add(numPackets int, numBytes int64) {
 	if rc.L
 
 	rc.LastPacketTime = time.Now()*/
-
+	// log.Infof("Sleeping")
+	// log.Infof("Wait for %d", rc.AveragePacketWaitingTime)
 	if rc.LastIntervalPackets%100 == 0 && rc.AveragePacketWaitingTime != 0 {
 		time.Sleep(rc.AveragePacketWaitingTime * 100)
+		// log.Infof("Sleeping")
 		// TODO: ENable rate control
 		// C.sleep(C.int(rc.AveragePacketWaitingTime * 100))
 	}
@@ -78,7 +137,11 @@ func (rc *RateControl) Add(numPackets int, numBytes int64) {
 }
 
 func (rc *RateControl) Start() {
-	rc.Ticker = time.NewTicker(rc.TimeInterval * time.Millisecond)
+	if rc.AveragePacketWaitingTime == 0 {
+		rc.AveragePacketWaitingTime = time.Duration(rc.NumCons * 2000) // TODO: Validate
+		rc.DecreaseWaitingTime = 500
+	}
+	/*rc.Ticker = time.NewTicker(rc.TimeInterval * time.Millisecond)
 	rc.recalculateRate()
 	go func() {
 		for {
@@ -89,7 +152,8 @@ func (rc *RateControl) Start() {
 				rc.recalculateRate()
 			}
 		}
-	}()
+	}()*/
+	rc.Running = true
 }
 
 func (rc *RateControl) recalculateRate() {
@@ -160,6 +224,7 @@ func (rc *RateControl) recalculateRate() {
 }
 
 func (rc *RateControl) Stop() {
-	rc.Ticker.Stop()
-	rc.CtrlChan <- false
+	//rc.Ticker.Stop()
+	///rc.CtrlChan <- false
+	rc.Running = false
 }
