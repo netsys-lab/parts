@@ -231,6 +231,7 @@ func (b *PartsSock) ReadPart(part []byte) {
 		b.acivePartIndex++
 	}
 	wg.Wait()
+
 	var averageBandwidth int64 = 0
 	var maxDownloadTime time.Duration = 0
 
@@ -243,6 +244,23 @@ func (b *PartsSock) ReadPart(part []byte) {
 		}
 	}
 	log.Infof("Download took %s with aggregated bandwidth %dMbit/s for %d bytes", maxDownloadTime, averageBandwidth, len(part))
+	for _, partsConn := range b.partConns {
+		p := socket.PartRequestPacket{
+			PartId:             partsConn.PartId,
+			NumPacketsPerTx:    1,
+			PacketTxIndex:      0,
+			LastSequenceNumber: partsConn.partContext.HighestSequenceNumber,
+			TransactionId:      0,
+			PartFinished:       true,
+		}
+		var network bytes.Buffer // Stand-in for a network connection
+		enc := gob.NewEncoder(&network)
+		err := enc.Encode(p)
+		if err != nil {
+			log.Fatal("encode error:", err)
+		}
+		_, err = b.controlPlane.Write(network.Bytes())
+	}
 
 }
 
@@ -265,11 +283,17 @@ func (b *PartsSock) collectRetransfers() {
 			log.Fatal("encode error:", err)
 		}
 
+		partsConn := b.partConns[(p.PartId-1)%int64(b.NumCons)]
+		if p.PartFinished {
+			partsConn.mode = MODE_DONE
+			continue
+		}
+
 		// log.Info(p)
 
 		// log.Infof("Got PartRequestPacket with maxSequenceNumber %d, %d missingNums and partId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.PartId)
 		// TODO: Add to retransfers
-		partsConn := b.partConns[(p.PartId-1)%int64(b.NumCons)]
+
 		partsConn.RateControl.AddAckMessage(p)
 		for i, v := range p.MissingSequenceNumbers {
 			// log.Infof("Add %d to missing sequenceNumbers for client to send them back later", v)
@@ -313,7 +337,7 @@ func (b *PartsSock) requestRetransfers() {
 					continue
 				}
 
-				missingNumsPerPacket := 200
+				missingNumsPerPacket := 150
 				missingNumIndex := 0
 				// log.Infof("Having %d missing Sequence Numbers for con index %d", len(partsConn.partContext.MissingSequenceNums), i)
 				start := 0

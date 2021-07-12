@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/martenwallewein/parts/socket"
-	"github.com/martenwallewein/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -149,8 +148,51 @@ func (rc *RateControl) Add(numPackets int, numBytes int64) {
 
 func (rc *RateControl) Start() {
 	if rc.AveragePacketWaitingTime == 0 && !rc.IsServer {
-		rc.AveragePacketWaitingTime = time.Duration(utils.Max64(int64(time.Duration(rc.NumCons*2000)), 8000)) // TODO: Validate
-		rc.DecreaseWaitingTime = 500
+		// this is a bit hacky, but for now it should work
+		switch rc.NumCons {
+		case 1:
+			rc.AveragePacketWaitingTime = 2000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 2:
+			rc.AveragePacketWaitingTime = 4000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 3:
+			rc.AveragePacketWaitingTime = 6000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 4:
+			rc.AveragePacketWaitingTime = 6000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 5:
+			rc.AveragePacketWaitingTime = 10000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 6:
+			rc.AveragePacketWaitingTime = 12000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 7:
+			rc.AveragePacketWaitingTime = 14000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 8:
+			rc.AveragePacketWaitingTime = 16000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 9:
+			rc.AveragePacketWaitingTime = 18000
+			rc.DecreaseWaitingTime = 500
+			break
+		case 10:
+			rc.AveragePacketWaitingTime = 20000
+			rc.DecreaseWaitingTime = 500
+			break
+		}
+		// rc.AveragePacketWaitingTime = time.Duration(utils.Max64(int64(time.Duration(rc.NumCons*2000)), 8000)) // TODO: Validate
+		// rc.DecreaseWaitingTime = 500
 	}
 	rc.FirstPacket = false
 	/*rc.Ticker = time.NewTicker(rc.TimeInterval * time.Millisecond)

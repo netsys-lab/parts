@@ -8,6 +8,7 @@ type PartRequestPacket struct {
 	MissingSequenceNumbers       []int64
 	MissingSequenceNumberOffsets []int64
 	TransactionId                int64
+	PartFinished                 bool
 }
 
 type PartPacket struct {

@@ -111,7 +111,7 @@ func (b *PartsConn) WritePart(part []byte, partId int64) {
 	b.RateControl.Stop()
 	b.mode = MODE_RETRANSFER
 	b.retransferMissingPackets()
-	time.Sleep(100 * time.Second)
+	// time.Sleep(100 * time.Second)
 }
 
 func (b *PartsConn) ReadPart(part []byte, partId int64) (int64, time.Duration, error) {
@@ -155,7 +155,7 @@ func (b *PartsConn) ReadPart(part []byte, partId int64) (int64, time.Duration, e
 	elapsedTime := time.Since(b.RateControl.FirstPacketTime)
 	log.Infof("Time of first packet %s", b.RateControl.FirstPacketTime)
 	// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
-	averageBandwidth := int64((float64(len(partContext.Data)/1024/1024) * 8) / float64(elapsedTime/time.Second))
+	averageBandwidth := int64((float64(partContext.NumPackets*b.RateControl.PacketSize/1024/1024) * 8) / float64(elapsedTime/time.Second))
 	log.Infof("Part %d took %s with average bandwidth %dMbit/s for %d bytes", b.PartId, elapsedTime, averageBandwidth, len(partContext.Data))
 	log.Infof("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(part), md5.Sum(part))
 	// log.Info(part[len(part)-1000:])
