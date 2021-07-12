@@ -170,24 +170,24 @@ func (rc *RateControl) Start() {
 			rc.DecreaseWaitingTime = 300
 			break
 		case 6:
-			rc.AveragePacketWaitingTime = 12000
-			rc.DecreaseWaitingTime = 400
+			rc.AveragePacketWaitingTime = 11000
+			rc.DecreaseWaitingTime = 300
 			break
 		case 7:
-			rc.AveragePacketWaitingTime = 14000
-			rc.DecreaseWaitingTime = 400
+			rc.AveragePacketWaitingTime = 12000
+			rc.DecreaseWaitingTime = 300
 			break
 		case 8:
-			rc.AveragePacketWaitingTime = 16000
-			rc.DecreaseWaitingTime = 400
+			rc.AveragePacketWaitingTime = 14000
+			rc.DecreaseWaitingTime = 300
 			break
 		case 9:
-			rc.AveragePacketWaitingTime = 18000
-			rc.DecreaseWaitingTime = 400
+			rc.AveragePacketWaitingTime = 17000
+			rc.DecreaseWaitingTime = 300
 			break
 		case 10:
 			rc.AveragePacketWaitingTime = 20000
-			rc.DecreaseWaitingTime = 400
+			rc.DecreaseWaitingTime = 300
 			break
 		}
 		// rc.AveragePacketWaitingTime = time.Duration(utils.Max64(int64(time.Duration(rc.NumCons*2000)), 8000)) // TODO: Validate
