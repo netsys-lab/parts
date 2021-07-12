@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/martenwallewein/parts/socket"
-	log "github.com/sirupsen/logrus"
 )
 
 // #include <stdio.h>
@@ -98,16 +97,16 @@ func (rc *RateControl) AddAckMessage(msg socket.PartRequestPacket) {
 func (rc *RateControl) Recalculate(msg *socket.PartRequestPacket) {
 	// Decrease
 	if (rc.NumReceivedMissingNumbers - 10) > rc.LastNumReceivedMissingNumbers {
-		log.Infof("Run into packet loss, reducing speed")
+		// log.Infof("Run into packet loss, reducing speed")
 		rc.LimitReached = true
 		rc.AveragePacketWaitingTime += time.Duration(rc.DecreaseWaitingTime)
 	} else if rc.NumReceivedMissingNumbers <= 10 && !rc.LimitReached { // Increase
 		if rc.DecreaseWaitingTime > int(rc.AveragePacketWaitingTime) {
-			log.Infof("Having max speed, no rate limit enforced")
+			// log.Infof("Having max speed, no rate limit enforced")
 			rc.AveragePacketWaitingTime = 0
 		} else {
 			rc.AveragePacketWaitingTime -= time.Duration(rc.DecreaseWaitingTime)
-			log.Infof("Increasing waiting time speed to %d", rc.AveragePacketWaitingTime)
+			// log.Infof("Increasing waiting time speed to %d", rc.AveragePacketWaitingTime)
 		}
 	} else {
 		// log.Infof("Achieved max speed, not rate limit enforced")
@@ -122,7 +121,7 @@ func (rc *RateControl) Add(numPackets int, numBytes int64) {
 	if !rc.FirstPacket {
 		rc.FirstPacket = true
 		rc.FirstPacketTime = time.Now()
-		log.Infof("setting rc time %s", rc.FirstPacketTime)
+		// log.Infof("setting rc time %s", rc.FirstPacketTime)
 	}
 
 	// if rc.MaxSpeed == 0 {
@@ -151,16 +150,16 @@ func (rc *RateControl) Start() {
 		// this is a bit hacky, but for now it should work
 		switch rc.NumCons {
 		case 1:
-			rc.AveragePacketWaitingTime = 2000
-			rc.DecreaseWaitingTime = 500
+			rc.AveragePacketWaitingTime = 1000
+			rc.DecreaseWaitingTime = 100
 			break
 		case 2:
-			rc.AveragePacketWaitingTime = 4000
-			rc.DecreaseWaitingTime = 500
+			rc.AveragePacketWaitingTime = 2000
+			rc.DecreaseWaitingTime = 200
 			break
 		case 3:
-			rc.AveragePacketWaitingTime = 6000
-			rc.DecreaseWaitingTime = 500
+			rc.AveragePacketWaitingTime = 4000
+			rc.DecreaseWaitingTime = 300
 			break
 		case 4:
 			rc.AveragePacketWaitingTime = 6000
@@ -168,27 +167,27 @@ func (rc *RateControl) Start() {
 			break
 		case 5:
 			rc.AveragePacketWaitingTime = 10000
-			rc.DecreaseWaitingTime = 500
+			rc.DecreaseWaitingTime = 300
 			break
 		case 6:
 			rc.AveragePacketWaitingTime = 12000
-			rc.DecreaseWaitingTime = 500
+			rc.DecreaseWaitingTime = 400
 			break
 		case 7:
 			rc.AveragePacketWaitingTime = 14000
-			rc.DecreaseWaitingTime = 500
+			rc.DecreaseWaitingTime = 400
 			break
 		case 8:
 			rc.AveragePacketWaitingTime = 16000
-			rc.DecreaseWaitingTime = 500
+			rc.DecreaseWaitingTime = 400
 			break
 		case 9:
 			rc.AveragePacketWaitingTime = 18000
-			rc.DecreaseWaitingTime = 500
+			rc.DecreaseWaitingTime = 400
 			break
 		case 10:
 			rc.AveragePacketWaitingTime = 20000
-			rc.DecreaseWaitingTime = 500
+			rc.DecreaseWaitingTime = 400
 			break
 		}
 		// rc.AveragePacketWaitingTime = time.Duration(utils.Max64(int64(time.Duration(rc.NumCons*2000)), 8000)) // TODO: Validate

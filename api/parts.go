@@ -191,7 +191,7 @@ func (b *PartsSock) WritePart(part []byte) {
 	//	}(b.acivePartIndex)
 	//	b.acivePartIndex++
 	var wg sync.WaitGroup
-	partLen := (bLen / b.NumCons)
+	partLen := utils.CeilForceInt(bLen, b.NumCons)
 	for i := 0; i < b.NumCons; i++ {
 		wg.Add(1)
 		go func(index int, wg *sync.WaitGroup) {
@@ -213,7 +213,7 @@ func (b *PartsSock) WritePart(part []byte) {
 func (b *PartsSock) ReadPart(part []byte) {
 	bLen := len(part)
 	var wg sync.WaitGroup
-	partLen := (bLen / b.NumCons)
+	partLen := utils.CeilForceInt(bLen, b.NumCons)
 	bwResults := make(chan int64, b.NumCons)
 	timeResults := make(chan time.Duration, b.NumCons)
 	for i := 0; i < b.NumCons; i++ {
