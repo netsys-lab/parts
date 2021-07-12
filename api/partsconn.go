@@ -91,6 +91,7 @@ func (b *PartsConn) WritePart(part []byte, partId int64) {
 		},
 		TestingMode: b.TestingMode,
 	}
+	b.RateControl.IsServer = false
 	b.RateControl.Start()
 	partContext.TransportPacketPacker.SetLocal(b.localAddr, b.localStartPort)
 	partContext.TransportPacketPacker.SetRemote(b.remoteAddr, b.remoteStartPort)
@@ -113,7 +114,7 @@ func (b *PartsConn) WritePart(part []byte, partId int64) {
 	time.Sleep(100 * time.Second)
 }
 
-func (b *PartsConn) ReadPart(part []byte, partId int64) {
+func (b *PartsConn) ReadPart(part []byte, partId int64) (int64, time.Duration, error) {
 	// TODO: Not overwrite if actually receiving
 	b.part = part
 	b.PartId = partId
@@ -123,8 +124,13 @@ func (b *PartsConn) ReadPart(part []byte, partId int64) {
 		MaxPacketLength:       PACKET_SIZE,
 		PartId:                partId,
 		Data:                  part,
-		OnPartStatusChange:    func(numMsg int, bytes int) {},
-		TestingMode:           b.TestingMode,
+		OnPartStatusChange: func(numMsg int, bytes int) {
+			if !b.TestingMode {
+				// log.Infof("Print on PartsConn %d", b.PartId)
+				b.RateControl.Add(numMsg, int64(bytes))
+			}
+		},
+		TestingMode: b.TestingMode,
 	}
 	partContext.TransportPacketPacker.SetLocal(b.localAddr, b.localStartPort)
 	partContext.TransportPacketPacker.SetRemote(b.remoteAddr, b.remoteStartPort)
@@ -143,11 +149,18 @@ func (b *PartsConn) ReadPart(part []byte, partId int64) {
 	// TODO: Waiting queue
 	// TODO: sync write calls
 	// TODO: Can not put this into struct for whatever reason
-
+	b.RateControl.IsServer = true
+	b.RateControl.Start()
 	b.TransportSocket.ReadPart(&partContext)
+	elapsedTime := time.Since(b.RateControl.FirstPacketTime)
+	log.Infof("Time of first packet %s", b.RateControl.FirstPacketTime)
+	// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
+	averageBandwidth := int64((float64(len(partContext.Data)/1024/1024) * 8) / float64(elapsedTime/time.Second))
+	log.Infof("Part %d took %s with average bandwidth %dMbit/s for %d bytes", b.PartId, elapsedTime, averageBandwidth, len(partContext.Data))
 	log.Infof("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(part), md5.Sum(part))
 	// log.Info(part[len(part)-1000:])
 	// copy(part, partContext.Data)
+	return averageBandwidth, elapsedTime, nil
 }
 
 func (b *PartsConn) retransferMissingPackets() {

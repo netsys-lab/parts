@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/martenwallewein/parts/socket"
+	"github.com/martenwallewein/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,6 +49,9 @@ type RateControl struct {
 	LastTx                        int64
 	NumPacketsPerTx               int
 	NumCons                       int
+	FirstPacketTime               time.Time
+	FirstPacket                   bool
+	IsServer                      bool
 }
 
 func NewRateControl(
@@ -115,6 +119,13 @@ func (rc *RateControl) Recalculate(msg *socket.PartRequestPacket) {
 func (rc *RateControl) Add(numPackets int, numBytes int64) {
 	rc.LastIntervalBytes = numBytes
 	rc.LastIntervalPackets += int64(numPackets)
+
+	if !rc.FirstPacket {
+		rc.FirstPacket = true
+		rc.FirstPacketTime = time.Now()
+		log.Infof("setting rc time %s", rc.FirstPacketTime)
+	}
+
 	// if rc.MaxSpeed == 0 {
 	//	return
 	// }
@@ -137,10 +148,11 @@ func (rc *RateControl) Add(numPackets int, numBytes int64) {
 }
 
 func (rc *RateControl) Start() {
-	if rc.AveragePacketWaitingTime == 0 {
-		rc.AveragePacketWaitingTime = time.Duration(rc.NumCons * 2000) // TODO: Validate
+	if rc.AveragePacketWaitingTime == 0 && !rc.IsServer {
+		rc.AveragePacketWaitingTime = time.Duration(utils.Max64(int64(time.Duration(rc.NumCons*2000)), 8000)) // TODO: Validate
 		rc.DecreaseWaitingTime = 500
 	}
+	rc.FirstPacket = false
 	/*rc.Ticker = time.NewTicker(rc.TimeInterval * time.Millisecond)
 	rc.recalculateRate()
 	go func() {

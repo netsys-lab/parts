@@ -214,6 +214,8 @@ func (b *PartsSock) ReadPart(part []byte) {
 	bLen := len(part)
 	var wg sync.WaitGroup
 	partLen := (bLen / b.NumCons)
+	bwResults := make(chan int64, b.NumCons)
+	timeResults := make(chan time.Duration, b.NumCons)
 	for i := 0; i < b.NumCons; i++ {
 		wg.Add(1)
 		go func(index int, wg *sync.WaitGroup) {
@@ -221,13 +223,26 @@ func (b *PartsSock) ReadPart(part []byte) {
 			start := partLen * index
 			end := utils.Min(start+partLen, bLen)
 			log.Infof("Receiving for %d partLen, start %d, %d partLen and end %d", len(part[start:end]), start, partLen, end)
-			b.partConns[index%b.NumCons].ReadPart(part[start:end], int64(index+1)) // PartIds positive
-			wg.Done()
+			bw, time, _ := b.partConns[index%b.NumCons].ReadPart(part[start:end], int64(index+1)) // PartIds positive
+			defer wg.Done()
+			bwResults <- bw
+			timeResults <- time
 		}(b.acivePartIndex, &wg)
 		b.acivePartIndex++
 	}
-
 	wg.Wait()
+	var averageBandwidth int64 = 0
+	var maxDownloadTime time.Duration = 0
+
+	for i := 0; i < b.NumCons; i++ {
+		bw := <-bwResults
+		time := <-timeResults
+		averageBandwidth += bw
+		if maxDownloadTime < time {
+			maxDownloadTime = time
+		}
+	}
+	log.Infof("Download took %s with aggregated bandwidth %dMbit/s for %d bytes", maxDownloadTime, averageBandwidth, len(part))
 
 }
 

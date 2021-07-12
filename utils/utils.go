@@ -53,6 +53,13 @@ func RemoveFromSliceByIndex(s []int64, index int64) []int64 {
 	// return s[:len(s)-1]
 }
 
+func Max64(x, y int64) int64 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
 func Max(x, y int) int {
 	if x < y {
 		return y
