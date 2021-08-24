@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -15,6 +15,27 @@ func IndexOf(element int64, data []int64) int {
 	return -1 //not found.
 }
 
+func IndexOfMin(element int64, data []int64) int {
+	for k, v := range data {
+		if element == v {
+			return k
+		}
+
+		if element > v && len(data) == 1 {
+			return k
+		}
+
+		if element > v && k == len(data)-1 {
+			return k
+		}
+
+		if element > v && k < len(data)-1 && element < data[k+1] {
+			return k
+		}
+	}
+	return -1 //not found.
+}
+
 func RemoveFromSlice(s []int64, i int64) []int64 {
 	index := IndexOf(i, s)
 	if index == -1 {
@@ -23,6 +44,20 @@ func RemoveFromSlice(s []int64, i int64) []int64 {
 	}
 	s[index] = s[len(s)-1]
 	return s[:len(s)-1]
+}
+
+func RemoveFromSliceByIndex(s []int64, index int64) []int64 {
+	// TODO: Optimization?
+	return append(s[:index], s[index+1:]...)
+	// s[index] = s[len(s)-1]
+	// return s[:len(s)-1]
+}
+
+func Max64(x, y int64) int64 {
+	if x < y {
+		return y
+	}
+	return x
 }
 
 func Max(x, y int) int {
@@ -40,6 +75,16 @@ func Min(x, y int) int {
 }
 
 func CeilForce(x, y int64) int64 {
+	res := x / y
+	f := float64(x) / float64(y)
+	if f > float64(res) {
+		return res + 1
+	} else {
+		return res
+	}
+}
+
+func CeilForceInt(x, y int) int {
 	res := x / y
 	f := float64(x) / float64(y)
 	if f > float64(res) {
