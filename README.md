@@ -1,5 +1,7 @@
 # PARTS: Path-Aware Reliable Transport over SCION
 
+**Note:** In the current state, PARTS only supports a fraction of the planned features and concepts, since it's under ongoing development. 
+
 Parts is a reliable transport protocol based on UDP for high-performance multipath data transfer over SCION. The core concept of parts is splitting data into parts of variable size and transfer each part as a whole without requiring to keep packets in order. The partsize must be defined before sending the part to its receiver, but is not required to keep the same size for all parts. 
 
 Parts aims to perform best in high-performance networks with less link congestions, since comes with aggressive rate control which assumes the receiver to support high bandwidth loads. According to many concepts in SDN, parts separates data and control plane. Using the control plane, a loose connection-oriented transfer is initiated using partIds that are places in the header of each packet. To begin a transfer of one or multiple parts, the sender and receiver perform a handshake about the parts that will be sent, configuration and system information. 
@@ -12,7 +14,7 @@ Figure 1 shows the data and control flow of transferring data over parts. The co
 ![parts-structure (2)](https://user-images.githubusercontent.com/32448709/130609385-6b2da646-86f2-41a7-8cc6-69a22d40a131.jpg)
 
 
-The **PartSocke** provides the API for applications to write and read parts to particular SCION endhosts. Furthermore, the PartSock initiates the transfer by sending a control packet to the receiver and waits for its response. This packet contains information about how many parts will be transferred, the number of available sockets to send data and further information regarding sending performance. After receiving the response, PartSocket passes the data buffer to the scheduler, which splits the data into parts and assigns them to available sockets. 
+The **PartSocket** provides the API for applications to write and read parts to particular SCION endhosts. Furthermore, the PartSock initiates the transfer by sending a control packet to the receiver and waits for its response. This packet contains information about how many parts will be transferred, the number of available sockets to send data and further information regarding sending performance. After receiving the response, PartSocket passes the data buffer to the scheduler, which splits the data into parts and assigns them to available sockets. 
 
 After completing the control phase, one or more parts are transferred sequentially or in parallel, depending on the number of available lines. The sender starts with initiating the sending phase of a part with creating part data packets in the respective buffer. This creation may be distributed over multiple threads to increase processing speed. Meanwhile, the sending thread assigned to the line writes the previously created packets on the network. All packets are sent in row before entering the next phase, which is responsible for possible retransfers.
 
