@@ -1,4 +1,28 @@
-package socket
+package dataplane
+
+import (
+	"time"
+
+	"github.com/scionproto/scion/go/lib/snet"
+)
+
+type PartRequestPacket struct {
+	PartId                       int64
+	LastSequenceNumber           int64
+	NumPacketsPerTx              int
+	PacketTxIndex                int
+	MissingSequenceNumbers       []int64
+	MissingSequenceNumberOffsets []int64
+	TransactionId                int64
+	PartFinished                 bool
+}
+
+type PartPacket struct {
+	SequenceNumber int64
+	PartId         int64
+	PartSize       int64
+	Payload        []byte
+}
 
 type SocketOptions struct {
 	// TBD
@@ -16,9 +40,9 @@ type SocketOptions struct {
 // if useMmsg or UseGsoGro is enabled and implemented correctly
 type OnPartStatusChange func(numMsgs int, completedBytes int)
 
-type TransportSocket interface {
+type TransportDataplane interface {
 	// Opens a socket for the transport protocol
-	Listen(addr string, port int) error
+	Listen(addr string) error
 	// Writes the complete part from partContext.Data in the way this interface likes to
 	// Its recommended to send packets from begin to end, because
 	// at the moment the retransfer logic relies on that.
@@ -26,6 +50,9 @@ type TransportSocket interface {
 	WritePart(partContext *PartContext) (uint64, error)
 	// Read the complete part into partContext.Data
 	ReadPart(partContext *PartContext) (uint64, error)
+	WriteSingle(partContext *PartContext) (uint64, error)
+	// Read the complete part into partContext.Data
+	ReadSingle(partContext *PartContext) (uint64, error)
 	// Write a packet to the remoteAddr. Needs to insert the transport header for the transport socket
 	// Could be done like this:
 	// copy(packetBuffer[TransportPacketPacker.GetheaderLength():], payload)
@@ -34,7 +61,16 @@ type TransportSocket interface {
 	// Reads a packet from the remtoeAddr. Needs to remove the transport header.
 	Read(buf []byte) (int, error)
 	// Connects to the addr, so all WritePart and Write calls send to this destination
-	Dial(addr string, port int) error
+	Dial(laddr, addr string) error
+	SetState(state int)
+	LocalAddr() *snet.UDPAddr
+	RemoteAddr() *snet.UDPAddr
+	SetRemoteAddr(addr string) error
+	RetransferMissingPackets()
+	SetDeadline(t time.Time) error
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+	Stop() error
 }
 
 type TransportPacketPacker interface {
@@ -48,9 +84,9 @@ type TransportPacketPacker interface {
 	Pack(buf *[]byte, payloadLen int) error
 	// Remove the header from the buf and return only payload
 	Unpack(buf *[]byte) error
-	SetRemote(remoteAddr string, remotePort int)
-	SetLocal(localAddr string, localPort int)
+	SetRemote(remoteAddr *snet.UDPAddr)
+	SetLocal(localAddr *snet.UDPAddr)
 }
 
-type TransportSocketConstructor func() TransportSocket
-type TransportPackerConstructor func() TransportPacketPacker
+type TransportSocketConstructor func(packetChan chan []byte) TransportDataplane
+type TransportPackerConstructor func(packetChan chan []byte) TransportPacketPacker

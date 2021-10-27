@@ -1,10 +1,9 @@
-package socket
+package dataplane
 
 import (
 	"net"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/martenwallewein/parts/utils"
 	log "github.com/sirupsen/logrus"
@@ -63,74 +62,20 @@ func (b *PartContext) SetPayloadByPacketIndex(i int, payload []byte) {
 }
 
 func (b *PartContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
-	if b.TestingMode {
-		b.Lock()
-		start := testingState.TestingWriteIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		copy(testingState.TestingReceiveBuffer[start:end], data)
-		testingState.TestingWriteIndex++
-		log.Infof("Increase b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
-		b.Unlock()
-		return len(data), nil
-	} else {
-		return conn.Write(data)
-	}
+	return conn.Write(data)
+
 }
 
 func (b *PartContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
-	if b.TestingMode {
-		// log.Infof("Read called")
-		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
-			log.Infof("Check b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
-			time.Sleep(1000 * time.Millisecond)
-		}
-		// log.Infof("Read received")
-		b.Lock()
-		start := testingState.TestingReadIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		// log.Infof("Copy from %d to %d, %p", start, end, &testingState.TestingReceiveBuffer)
-		// log.Info(testingState.TestingReceiveBuffer[start:end])
-		copy(data, testingState.TestingReceiveBuffer[start:end])
-		testingState.TestingReadIndex++
-		b.Unlock()
-		return len(data), nil
-	} else {
-		return conn.Read(data)
-	}
+	return conn.Read(data)
 }
 
 func (b *PartContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr net.Addr) (int, error) {
-	if b.TestingMode {
-		b.Lock()
-		start := testingState.TestingWriteIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		copy(testingState.TestingReceiveBuffer[start:end], data)
-		// log.Infof("Copied from %d to %d, %p", start, end, &testingState.TestingReceiveBuffer)
-		// log.Info(testingState.TestingReceiveBuffer[start:end])
-		testingState.TestingWriteIndex++
-		// log.Infof("Increase b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
-		b.Unlock()
-		return len(data), nil
-	} else {
-		return conn.WriteTo(data, adr)
-	}
+	return conn.WriteTo(data, adr)
 }
 
 func (b *PartContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
-	if b.TestingMode {
-		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
-			time.Sleep(1 * time.Microsecond)
-		}
-		b.Lock()
-		start := testingState.TestingReadIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		copy(data, testingState.TestingReceiveBuffer[start:end])
-		testingState.TestingReadIndex++
-		b.Unlock()
-		return len(data), nil, nil
-	} else {
-		return conn.ReadFrom(data)
-	}
+	return conn.ReadFrom(data)
 }
 
 func (b *PartContext) Prepare() {
@@ -163,11 +108,14 @@ func (b *PartContext) SerializeRetransferPacket(packetBuffer *[]byte, sequenceNu
 	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.PartsPacketPacker.GetHeaderLen())
 }
 
-func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
+func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 	// log.Infof("Received ")
 
 	b.TransportPacketPacker.Unpack(packetBuffer)
-	p, _ := b.PartsPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
+	p, err := b.PartsPacketPacker.Unpack(packetBuffer, b)
+	if err != nil {
+		return err
+	}
 	diff := p.SequenceNumber - b.HighestSequenceNumber
 	// log.Infof("Got md5 for Payload %x ", md5.Sum((*packetBuffer)[:1320]))
 	// log.Infof("Received SequenceNumber %d", p.SequenceNumber)
@@ -218,4 +166,5 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 	if diff > 0 {
 		b.HighestSequenceNumber = p.SequenceNumber // +=diff
 	}
+	return nil
 }

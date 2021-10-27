@@ -1,6 +1,9 @@
-package socket
+package dataplane
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"errors"
+)
 
 type PartsPacketPacker interface {
 	GetHeaderLen() int
@@ -36,6 +39,10 @@ func (bp *BinaryPartsPacketPacker) Unpack(buf *[]byte, partContext *PartContext)
 	p := PartPacket{}
 	p.SequenceNumber = (int64(binary.BigEndian.Uint64((*buf)[8:16])))
 	p.PartId = (int64(binary.BigEndian.Uint64((*buf)[0:8])))
+	if p.PartId != partContext.PartId {
+		return nil, errors.New("mismatching partId")
+	}
+
 	*buf = (*buf)[partContext.PartsPacketPacker.GetHeaderLen():]
 	return &p, nil
 }

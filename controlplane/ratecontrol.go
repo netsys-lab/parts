@@ -1,10 +1,10 @@
-package control
+package controlplane
 
 import (
 	"sync"
 	"time"
 
-	"github.com/martenwallewein/parts/socket"
+	"github.com/martenwallewein/parts/dataplane"
 )
 
 // #include <stdio.h>
@@ -70,7 +70,7 @@ func NewRateControl(
 	return &rc
 }
 
-func (rc *RateControl) AddAckMessage(msg socket.PartRequestPacket) {
+func (rc *RateControl) AddAckMessage(msg dataplane.PartRequestPacket) {
 	// log.Info(msg)
 	if !rc.Running {
 		return
@@ -94,7 +94,7 @@ func (rc *RateControl) AddAckMessage(msg socket.PartRequestPacket) {
 	}
 }
 
-func (rc *RateControl) Recalculate(msg *socket.PartRequestPacket) {
+func (rc *RateControl) Recalculate(msg *dataplane.PartRequestPacket) {
 	// Decrease
 	if (rc.NumReceivedMissingNumbers - 10) > rc.LastNumReceivedMissingNumbers {
 		// log.Infof("Run into packet loss, reducing speed")
