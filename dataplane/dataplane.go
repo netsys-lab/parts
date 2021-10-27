@@ -3,6 +3,7 @@ package dataplane
 import (
 	"context"
 	"crypto/md5"
+	"encoding/binary"
 	"net"
 	"sync"
 	"time"
@@ -202,30 +203,51 @@ func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {
 	}
 	return n, nil
 }
-func (sts *SCIONDataplane) ReadSingle(bc *PartContext) (uint64, error) {
+func (sts *SCIONDataplane) ReadSingle(data []byte) (uint64, error) {
 
-	buffer := make([]byte, bc.RecommendedBufferSize)
-	var n uint64 = 0
-	for {
-		bts, err := bc.ReadFromConn(sts.Conn, buffer)
-		if err != nil {
-			return 0, err
-		}
-		err = bc.DeSerializePacket(&buffer)
-		if err == nil {
-			n += uint64(bts)
-			bc.OnPartStatusChange(1, bts)
-			break
-		} else {
-			// Pass to control plane to check if its some control packet
-			sts.PacketChan <- buffer
-		}
+	buffer := make([]byte, PACKET_SIZE)
+	bts, err := sts.Conn.Read(buffer)
+	if err != nil {
+		return 0, err
 	}
-	return n, nil
+
+	partId := int64(binary.BigEndian.Uint64(buffer[0:8]))
+	copy(data, buffer[8:])
+
+	// Ack partId
+	// TODO: Wait for AckAck?
+	// We can save the last partId and see if a packet with the same partId was read already, then
+	// we could ack this again, but no ackack
+	returnBuffer := make([]byte, 8)
+	binary.BigEndian.PutUint64(returnBuffer, uint64(partId))
+	_, err = sts.Conn.Write(buffer)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(bts), nil
+
+	/*
+		buffer := make([]byte, bc.RecommendedBufferSize)
+		var n uint64 = 0
+		for {
+			bts, err := bc.ReadFromConn(sts.Conn, buffer)
+			if err != nil {
+				return 0, err
+			}
+			err = bc.DeSerializePacket(&buffer)
+			if err == nil {
+				n += uint64(bts)
+				bc.OnPartStatusChange(1, bts)
+				break
+			} else {
+				// Pass to control plane to check if its some control packet
+				sts.PacketChan <- buffer
+			}
+		}*/
 }
 
-func (sts *SCIONDataplane) WriteSingle(bc *PartContext) (uint64, error) {
-	var n uint64 = 0
+func (sts *SCIONDataplane) WriteSingle(data []byte, partId int64) (uint64, error) {
+	/*var n uint64 = 0
 	log.Infof("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
 	for i := 0; i < bc.NumPackets; i++ {
 		payload := bc.GetPayloadByPacketIndex(i)
@@ -238,8 +260,30 @@ func (sts *SCIONDataplane) WriteSingle(bc *PartContext) (uint64, error) {
 			return 0, err
 		}
 		n += uint64(bts)
+	}*/
+	var retPartId int64 = 0
+	var n int
+	var err error
+	for retPartId != partId {
+		// TODO: Check max packet size overflow
+		buffer := make([]byte, len(data)+8)
+		binary.BigEndian.PutUint64(buffer[0:8], uint64(partId))
+		copy(buffer[8:], data)
+		n, err = sts.Conn.Write(buffer)
+		if err != nil {
+			return 0, err
+		}
+
+		retBuffer := make([]byte, 8)
+		_, err = sts.Conn.Read(retBuffer)
+		if err != nil {
+			return 0, err
+		}
+
+		retPartId = int64(binary.BigEndian.Uint64(retBuffer))
 	}
-	return n, nil
+
+	return uint64(n), nil
 }
 func (sts *SCIONDataplane) ReadPart(bc *PartContext) (uint64, error) {
 

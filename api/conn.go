@@ -113,9 +113,9 @@ func (p *PartsConn) Read(b []byte) (n int, err error) {
 		return len(b), nil
 		// p.partContext = partContext ?
 	} else {
-		p.dataplane.w
+		n, err := p.dataplane.ReadSingle(b)
+		return int(n), err
 	}
-	return 0, nil
 }
 
 func (p *PartsConn) Write(b []byte) (n int, err error) {
@@ -144,12 +144,8 @@ func (p *PartsConn) Write(b []byte) (n int, err error) {
 		p.dataplane.RetransferMissingPackets()
 		return int(n), nil
 	} else {
-		partContext, err := p.controlplane.PrepareSingleWrite(b)
-		if err != nil {
-			return 0, err
-		}
-
-		n, err := p.dataplane.WriteSingle(partContext)
+		partid := p.controlplane.NextPartId()
+		n, err := p.dataplane.WriteSingle(b, partid)
 		return int(n), err
 	}
 

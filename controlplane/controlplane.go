@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/martenwallewein/parts/dataplane"
-	"github.com/martenwallewein/parts/old/socket"
 	"github.com/martenwallewein/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -82,13 +81,13 @@ func (cp *ControlPlane) readControlPackets() {
 	}
 }
 
-func (cp *ControlPlane) nextPartId() int64 {
+func (cp *ControlPlane) NextPartId() int64 {
 	cp.currentPartId += 1
 	return cp.currentPartId
 }
 
 func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
-	nextPartId := cp.nextPartId()
+	nextPartId := cp.NextPartId()
 	hs := NewPartsHandshake()
 
 	// TODO: Await Answer
@@ -121,24 +120,6 @@ func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 	partContext.TransportPacketPacker.SetRemote(cp.Dataplane.RemoteAddr())
 	partContext.Prepare()
 
-	return &partContext, nil
-}
-
-func (cp *ControlPlane) PrepareSingleWrite(data []byte) (*dataplane.PartContext, error) {
-	partContext := dataplane.PartContext{
-		PartsPacketPacker:     dataplane.NewBinaryPartsPacketPacker(),
-		TransportPacketPacker: dataplane.NewSCIONPacketPacker(),
-		MaxPacketLength:       dataplane.PACKET_SIZE,
-		PartId:                int64(cp.nextPartId()),
-		Data:                  data,
-		OnPartStatusChange: func(numMsg int, bytes int) {
-			// log.Infof("Print on PartsConn %d", b.PartId)
-			// cp.Ratecontrol.Add(numMsg, int64(bytes))
-		},
-	}
-	partContext.TransportPacketPacker.SetLocal(cp.Dataplane.LocalAddr())
-	partContext.TransportPacketPacker.SetRemote(cp.Dataplane.RemoteAddr())
-	partContext.Prepare()
 	return &partContext, nil
 }
 
@@ -255,7 +236,7 @@ func (cp *ControlPlane) requestRetransfers() {
 				var network bytes.Buffer        // Stand-in for a network connection
 				enc := gob.NewEncoder(&network) // Will write to network.
 				// log.Infof("Requesting from %d to %d having %d (%d), partId %d", start, min, len(partsConn.partContext.MissingSequenceNums), partsConn.partContext.MissingSequenceNums, partsConn.PartId)
-				p := socket.PartRequestPacket{
+				p := dataplane.PartRequestPacket{
 					PartId:                       cp.PartContext.PartId,
 					NumPacketsPerTx:              utils.CeilForceInt(len(cp.PartContext.MissingSequenceNums), missingNumsPerPacket),
 					PacketTxIndex:                index,

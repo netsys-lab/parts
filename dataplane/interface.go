@@ -17,6 +17,11 @@ type PartRequestPacket struct {
 	PartFinished                 bool
 }
 
+type PartSinglePacket struct {
+	PartId  int64
+	Payload []byte
+}
+
 type PartPacket struct {
 	SequenceNumber int64
 	PartId         int64
@@ -50,9 +55,9 @@ type TransportDataplane interface {
 	WritePart(partContext *PartContext) (uint64, error)
 	// Read the complete part into partContext.Data
 	ReadPart(partContext *PartContext) (uint64, error)
-	WriteSingle(partContext *PartContext) (uint64, error)
+	WriteSingle([]byte, int64) (uint64, error)
 	// Read the complete part into partContext.Data
-	ReadSingle(partContext *PartContext) (uint64, error)
+	ReadSingle([]byte) (uint64, error)
 	// Write a packet to the remoteAddr. Needs to insert the transport header for the transport socket
 	// Could be done like this:
 	// copy(packetBuffer[TransportPacketPacker.GetheaderLength():], payload)
