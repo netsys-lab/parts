@@ -311,6 +311,7 @@ func (sts *SCIONDataplane) ReadPart(bc *PartContext) (uint64, error) {
 		err = bc.DeSerializePacket(&packetBuffer)
 		if err == nil {
 			n += uint64(bts)
+			bc.RecvPackets++
 			bc.OnPartStatusChange(1, bts)
 		} else {
 			// Pass to control plane to check if its some control packet

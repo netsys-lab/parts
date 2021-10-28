@@ -20,12 +20,14 @@ const (
 
 type ControlPlane struct {
 	sync.Mutex
-	Dataplane     dataplane.TransportDataplane
-	packetChan    chan []byte
-	state         int
-	PartContext   *dataplane.PartContext
-	Ratecontrol   *RateControl
-	currentPartId int64
+	Dataplane                 dataplane.TransportDataplane
+	packetChan                chan []byte
+	state                     int
+	PartContext               *dataplane.PartContext
+	Ratecontrol               *RateControl
+	currentPartId             int64
+	stopCtrlPacketsChan       chan bool
+	stopRetransferPacketsChan chan bool
 }
 
 func NewControlPlane(
@@ -34,8 +36,10 @@ func NewControlPlane(
 ) (*ControlPlane, error) {
 	// Make that thing Transport safe
 	cp := ControlPlane{
-		Dataplane:  dp,
-		packetChan: packetChan,
+		Dataplane:                 dp,
+		packetChan:                packetChan,
+		stopCtrlPacketsChan:       make(chan bool),
+		stopRetransferPacketsChan: make(chan bool),
 		// TODO: Fix these parameters
 		Ratecontrol: NewRateControl(100, 10000000, dataplane.PACKET_SIZE, 1),
 	}
@@ -71,27 +75,72 @@ func (cp *ControlPlane) Accept() error {
 // Starts the whole controlplane
 // TODO: Control channel
 func (cp *ControlPlane) Run() {
-	go cp.readControlPackets()
-	go cp.requestRetransfers()
+	/*stopCtrlPacketsChan := make(chan bool)
+	stopRetransferPacketsChan := make(chan bool)
+	go cp.readControlPackets(&stopCtrlPacketsChan)
+	go cp.requestRetransfers(&stopRetransferPacketsChan)*/
 }
 
-func (cp *ControlPlane) readControlPackets() {
-	for {
-		packet := <-cp.packetChan
+func (cp *ControlPlane) StartWritepart() {
+	go cp.HandleAckPackets(&cp.stopCtrlPacketsChan)
+}
 
-		switch cp.state {
-		// Must be new handshake packet
-		case CP_STATE_PENDING:
+func (cp *ControlPlane) StartReadpart() {
+	go cp.requestRetransfers(&cp.stopRetransferPacketsChan)
+}
+
+func (cp *ControlPlane) FinishWritepart() {
+	cp.stopCtrlPacketsChan <- true
+}
+
+func (cp *ControlPlane) FinishReadpart() {
+	cp.stopRetransferPacketsChan <- true
+}
+
+func (cp *ControlPlane) HandleAckPackets(stopChan *chan bool) {
+	for {
+		select {
+		case <-*stopChan:
+			return
+		default:
 			break
-		// Must be Ack packet
-		case CP_STATE_SENDING:
-			ackPacket, err := cp.parsePartAckPacket(packet)
-			if err != nil {
-				log.Error("Failed to read ack packet %v", err)
-				continue
+		}
+		buffer := make([]byte, dataplane.PACKET_SIZE)
+		_, err := cp.Dataplane.Read(buffer)
+		if err != nil {
+			log.Error("Failed to read ack packet %v", err)
+			continue
+		}
+		ackPacket, err := cp.parsePartAckPacket(buffer)
+		if err != nil {
+			log.Error("Failed to read ack packet %v", err)
+			continue
+		}
+		cp.handlePartAckPacket(ackPacket)
+	}
+
+}
+
+func (cp *ControlPlane) readControlPackets(stopChan *chan bool) {
+	for {
+		select {
+		case <-*stopChan:
+			return
+		case packet := <-cp.packetChan:
+			switch cp.state {
+			// Must be new handshake packet
+			case CP_STATE_PENDING:
+				break
+			// Must be Ack packet
+			case CP_STATE_SENDING:
+				ackPacket, err := cp.parsePartAckPacket(packet)
+				if err != nil {
+					log.Error("Failed to read ack packet %v", err)
+					continue
+				}
+				cp.handlePartAckPacket(ackPacket)
+				break
 			}
-			cp.handlePartAckPacket(ackPacket)
-			break
 		}
 	}
 }
@@ -161,7 +210,7 @@ func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 		MissingSequenceNumOffsets: make([]int64, 0),
 		OnPartStatusChange: func(numMsg int, bytes int) {
 			// log.Infof("Print on PartsConn %d", b.PartId)
-			// cp.Ratecontrol.Add(numMsg, int64(bytes))
+			cp.Ratecontrol.Add(numMsg, int64(bytes))
 		},
 	}
 	partContext.TransportPacketPacker.SetLocal(cp.Dataplane.LocalAddr())
@@ -268,7 +317,8 @@ func (cp *ControlPlane) parsePartAckPacket(packet []byte) (*PartAckPacket, error
 	return &p, nil
 }
 
-func (cp *ControlPlane) requestRetransfers() {
+func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
+	// TODO: After x packets, or timeout after x milliseconds
 	ticker := time.NewTicker(100 * time.Millisecond)
 	done := make(chan bool)
 	// log.Infof("In Call of requestRetransfers %p", missingNums)
@@ -278,15 +328,17 @@ func (cp *ControlPlane) requestRetransfers() {
 		select {
 		case <-done:
 			return
+		case <-*stopChan:
+			return
 		case <-ticker.C:
 			if cp.PartContext == nil {
 				continue
 			}
 
 			// This happens only in receiving state
-			if cp.state != CP_STATE_RECEIVING {
-				continue
-			}
+			// if cp.state != CP_STATE_RECEIVING {
+			//	continue
+			// }
 
 			// If we have no packets received, we dont need to request retransfers
 			if cp.PartContext.HighestSequenceNumber < 1 {

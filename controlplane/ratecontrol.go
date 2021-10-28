@@ -151,7 +151,7 @@ func (rc *RateControl) Start() {
 		switch rc.NumCons {
 		case 1:
 			rc.AveragePacketWaitingTime = 1000
-			rc.DecreaseWaitingTime = 100
+			rc.DecreaseWaitingTime = 300
 			break
 		case 2:
 			rc.AveragePacketWaitingTime = 2000
