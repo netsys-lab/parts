@@ -14,8 +14,8 @@ var flags = struct {
 	ClientLocal string
 	Mode        string
 }{
-	Server: "localhost:8000",
-	Client: "localHost:8001",
+	Server: "19-ffaa:1:cf1,[127.0.0.1]:8000",
+	Client: "19-ffaa:1:cf1,[127.0.0.1]:8001",
 	Mode:   "singlehost", // "server" | "client" | "singlehost"
 }
 
@@ -28,14 +28,13 @@ func main() {
 			log.Fatal(err)
 		}
 
-		conn2, err := parts.Dial(flags.Client, flags.Server)
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		go func() {
 			time.Sleep(1 * time.Second)
-			buf := make([]byte, 1000)
+			conn2, err := parts.Dial(flags.Client, flags.Server)
+			if err != nil {
+				log.Fatal(err)
+			}
+			buf := make([]byte, 20000000)
 			n, err := conn2.Write(buf)
 			if err != nil {
 				log.Fatal(err)
@@ -43,7 +42,8 @@ func main() {
 			log.Infof("Wrote %d bytes successfully", n)
 
 		}()
-		buf := make([]byte, 1000)
+		err = conn.Accept()
+		buf := make([]byte, 20000000)
 		n, err := conn.Read(buf)
 		if err != nil {
 			log.Fatal(err)

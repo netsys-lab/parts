@@ -53,6 +53,21 @@ func (cp *ControlPlane) SetState(state int) {
 	cp.Unlock()
 }
 
+func (cp *ControlPlane) Accept() error {
+	hs := NewPartsHandshake()
+	cp.Dataplane.Read(hs.raw)
+	err := hs.Decode()
+	if err != nil {
+		return err
+	}
+
+	if cp.Dataplane.RemoteAddr() == nil {
+		cp.Dataplane.SetRemoteAddr(hs.LocalAddr)
+	}
+
+	return nil
+}
+
 // Starts the whole controlplane
 // TODO: Control channel
 func (cp *ControlPlane) Run() {
@@ -86,6 +101,28 @@ func (cp *ControlPlane) NextPartId() int64 {
 	return cp.currentPartId
 }
 
+func (cp *ControlPlane) InitialHandshake(data []byte) error {
+	nextPartId := cp.NextPartId()
+	hs := NewPartsHandshake()
+
+	// TODO: Await Answer
+	hs.PartTransfers = make([]PartTransfer, 1)
+	hs.PartTransfers[0] = PartTransfer{
+		PartId:   uint64(nextPartId),
+		PartSize: uint64(len(data)),
+		Port:     0,
+	}
+	hs.LocalAddr = cp.Dataplane.LocalAddr().String()
+
+	err := hs.Encode()
+	if err != nil {
+		return err
+	}
+
+	cp.Dataplane.Write(hs.raw)
+	return nil
+}
+
 func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 	nextPartId := cp.NextPartId()
 	hs := NewPartsHandshake()
@@ -97,6 +134,7 @@ func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 		PartSize: uint64(len(data)),
 		Port:     0,
 	}
+	hs.LocalAddr = cp.Dataplane.LocalAddr().String()
 
 	err := hs.Encode()
 	if err != nil {
@@ -105,12 +143,22 @@ func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 
 	cp.Dataplane.Write(hs.raw)
 
+	// TODO: Check PartId
+	retHs := NewPartsHandshake()
+	cp.Dataplane.Read(retHs.raw)
+	err = hs.Decode()
+	if err != nil {
+		return nil, err
+	}
+
 	partContext := dataplane.PartContext{
-		PartsPacketPacker:     dataplane.NewBinaryPartsPacketPacker(),
-		TransportPacketPacker: dataplane.NewSCIONPacketPacker(),
-		MaxPacketLength:       dataplane.PACKET_SIZE,
-		PartId:                int64(hs.PartTransfers[0].PartId),
-		Data:                  data,
+		PartsPacketPacker:         dataplane.NewBinaryPartsPacketPacker(),
+		TransportPacketPacker:     dataplane.NewSCIONPacketPacker(),
+		MaxPacketLength:           dataplane.PACKET_SIZE,
+		PartId:                    int64(hs.PartTransfers[0].PartId),
+		Data:                      data,
+		MissingSequenceNums:       make([]int64, 0),
+		MissingSequenceNumOffsets: make([]int64, 0),
 		OnPartStatusChange: func(numMsg int, bytes int) {
 			// log.Infof("Print on PartsConn %d", b.PartId)
 			// cp.Ratecontrol.Add(numMsg, int64(bytes))
@@ -123,7 +171,7 @@ func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 	return &partContext, nil
 }
 
-func (cp *ControlPlane) AwaitHandshake() (*dataplane.PartContext, error) {
+func (cp *ControlPlane) AwaitHandshake(b []byte) (*dataplane.PartContext, error) {
 
 	hs := NewPartsHandshake()
 	cp.Dataplane.Read(hs.raw)
@@ -136,11 +184,32 @@ func (cp *ControlPlane) AwaitHandshake() (*dataplane.PartContext, error) {
 		cp.Dataplane.SetRemoteAddr(hs.LocalAddr)
 	}
 
+	retHs := NewPartsHandshake()
+
+	// TODO: Await Answer
+	retHs.PartTransfers = make([]PartTransfer, 1)
+	retHs.PartTransfers[0] = PartTransfer{
+		PartId:   uint64(hs.PartTransfers[0].PartId),
+		PartSize: uint64(hs.PartTransfers[0].PartSize),
+		Port:     0,
+	}
+	retHs.LocalAddr = cp.Dataplane.LocalAddr().String()
+
+	err = retHs.Encode()
+	if err != nil {
+		return nil, err
+	}
+
+	cp.Dataplane.Write(retHs.raw)
+
 	partContext := dataplane.PartContext{
-		PartsPacketPacker:     dataplane.NewBinaryPartsPacketPacker(),
-		TransportPacketPacker: dataplane.NewSCIONPacketPacker(),
-		MaxPacketLength:       dataplane.PACKET_SIZE,
-		PartId:                int64(hs.PartTransfers[0].PartId),
+		PartsPacketPacker:         dataplane.NewBinaryPartsPacketPacker(),
+		TransportPacketPacker:     dataplane.NewSCIONPacketPacker(),
+		MaxPacketLength:           dataplane.PACKET_SIZE,
+		PartId:                    int64(hs.PartTransfers[0].PartId),
+		MissingSequenceNums:       make([]int64, 0),
+		MissingSequenceNumOffsets: make([]int64, 0),
+		Data:                      b,
 		OnPartStatusChange: func(numMsg int, bytes int) {
 			// log.Infof("Print on PartsConn %d", b.PartId)
 			// cp.Ratecontrol.Add(numMsg, int64(bytes))
@@ -151,9 +220,7 @@ func (cp *ControlPlane) AwaitHandshake() (*dataplane.PartContext, error) {
 	partContext.TransportPacketPacker.SetRemote(cp.Dataplane.RemoteAddr())
 	partContext.Prepare()
 
-	// TODO: send Answer
-
-	return nil, nil
+	return &partContext, nil
 }
 
 // Collecting retransfers

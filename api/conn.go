@@ -72,7 +72,7 @@ func Listen(localAddr string) (*PartsConn, error) {
 		return nil, err
 	}
 
-	return nil, nil
+	return pc, nil
 }
 
 func Dial(localAddr, remoteAddr string) (*PartsConn, error) {
@@ -85,22 +85,30 @@ func Dial(localAddr, remoteAddr string) (*PartsConn, error) {
 		return nil, err
 	}
 
-	return nil, nil
+	// Setting dataplane remote
+	err = pc.controlplane.InitialHandshake(make([]byte, 0))
+	if err != nil {
+		return nil, err
+	}
+
+	return pc, nil
 }
 
+func (p *PartsConn) Accept() error {
+	return p.controlplane.Accept()
+}
 func (p *PartsConn) Read(b []byte) (n int, err error) {
 	// TODO: Not overwrite if actually receiving
-	p.part = b
+	// p.part = b
 	// p.PartId = partId
 
 	// Check if Read is a single packet or larger one
 	if len(b) >= 1200 { // TODO correct size here...
 		// p.controlplane.A
-		partContext, err := p.controlplane.AwaitHandshake()
+		partContext, err := p.controlplane.AwaitHandshake(b)
 		if err != nil {
 			return 0, err
 		}
-		partContext.Data = b
 		p.controlplane.Ratecontrol.IsServer = true
 		p.controlplane.Ratecontrol.Start()
 		p.dataplane.ReadPart(partContext)

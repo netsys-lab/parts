@@ -85,6 +85,7 @@ func (sts *SCIONDataplane) SetRemoteAddr(addr string) error {
 	}
 
 	sts.remoteAddr = remoteAddr
+	sts.Conn.SetRemote(remoteAddr)
 	return nil
 }
 
@@ -121,7 +122,11 @@ func (sts *SCIONDataplane) Dial(laddr, addr string) error {
 	}
 
 	sts.listenAddr = listenAddr.Host
+	sts.localAddr = listenAddr
 	sts.remoteAddr = remoteAddr
+
+	appnet.SetDefaultPath(remoteAddr)
+
 	optimizedConn, err := optimizedconn.Dial(sts.listenAddr, remoteAddr)
 	if err != nil {
 		return err
@@ -138,6 +143,12 @@ func (sts *SCIONDataplane) Listen(addr string) error {
 	if err != nil {
 		return err
 	}
+
+	optimizedconn, err := optimizedconn.Listen(sts.localAddr.Host)
+	if err != nil {
+		return err
+	}
+	sts.Conn = optimizedconn
 	sts.state = DP_STATE_PENDING
 	sts.listenAddr = listenAddr.Host
 	return nil
@@ -188,6 +199,7 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 
 func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {
 	var n uint64 = 0
+	sts.partContext = bc
 	log.Infof("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
 	for i := 0; i < bc.NumPackets; i++ {
 		payload := bc.GetPayloadByPacketIndex(i)
@@ -224,7 +236,7 @@ func (sts *SCIONDataplane) ReadSingle(data []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return uint64(bts), nil
+	return uint64(bts) - 8, nil
 
 	/*
 		buffer := make([]byte, bc.RecommendedBufferSize)
