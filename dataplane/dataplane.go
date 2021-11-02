@@ -158,6 +158,7 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 	log.Infof("Entering retransfer")
 	dp.state = DP_STATE_RETRANSFER
 	for dp.state == DP_STATE_RETRANSFER {
+		// log.Printf("Retransferring %d slots", len(dp.partContext.MissingSequenceNumOffsets))
 		// log.Infof("Having %d missing sequenceNums with addr %p", len(b.partContext.MissingSequenceNums), &b.partContext.MissingSequenceNums)
 		for i, v := range dp.partContext.MissingSequenceNums {
 			if v == 0 {
@@ -180,7 +181,8 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 				dp.metrics.TxBytes += uint64(bts)
 				dp.metrics.TxPackets += 1
 				// TODO: Make this faster
-				time.Sleep(10 * time.Microsecond)
+				// time.Sleep(10 * time.Microsecond)
+				dp.partContext.OnPartStatusChange(1, bts)
 				if err != nil {
 					log.Fatal("error:", err)
 				}
@@ -193,7 +195,8 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 		// log.Infof("Resetting retransfers")
 		// TODO: Remove!
 		dp.partContext.Unlock()
-		time.Sleep(300 * time.Millisecond)
+		// TODO: Make this dependent on Acks
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

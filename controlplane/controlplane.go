@@ -41,7 +41,7 @@ func NewControlPlane(
 		stopCtrlPacketsChan:       make(chan bool),
 		stopRetransferPacketsChan: make(chan bool),
 		// TODO: Fix these parameters
-		Ratecontrol: NewRateControl(100, 10000000, dataplane.PACKET_SIZE, 1),
+		Ratecontrol: NewRateControl(),
 	}
 
 	return &cp, nil
@@ -283,6 +283,8 @@ func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) {
 		// continue
 	}
 
+	cp.Ratecontrol.AddAckMessage(p)
+
 	// log.Info(p)
 
 	// log.Infof("Got PartRequestPacket with maxSequenceNumber %d, %d missingNums and partId %d", p.LastSequenceNumber, len(p.MissingSequenceNumbers), p.PartId)
@@ -319,11 +321,12 @@ func (cp *ControlPlane) parsePartAckPacket(packet []byte) (*PartAckPacket, error
 
 func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 	// TODO: After x packets, or timeout after x milliseconds
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	done := make(chan bool)
 	// log.Infof("In Call of requestRetransfers %p", missingNums)
 	// log.Infof("In Call of requestRetransfers go routine %p", missingNums)
 	var txId int64 = 1
+	requestSequenceId := 1
 	for {
 		select {
 		case <-done:
@@ -345,12 +348,12 @@ func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 				continue
 			}
 
-			missingNumsPerPacket := 150
+			missingNumsPerPacket := 100
 			missingNumIndex := 0
-			// log.Infof("Having %d missing Sequence Numbers for con index %d", len(partsConn.partContext.MissingSequenceNums), i)
+			// log.Infof("Having %d missing Sequence Numbers for con index %d", len(cp.PartContext.MissingSequenceNums), 0)
 			start := 0
 			index := 0
-			for missingNumIndex <= len(cp.PartContext.MissingSequenceNums) {
+			for len(cp.PartContext.MissingSequenceNums) == 0 || missingNumIndex < len(cp.PartContext.MissingSequenceNums) {
 				min := utils.Min(start+missingNumsPerPacket, len(cp.PartContext.MissingSequenceNums))
 				var network bytes.Buffer        // Stand-in for a network connection
 				enc := gob.NewEncoder(&network) // Will write to network.
@@ -363,6 +366,8 @@ func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 					MissingSequenceNumbers:       (cp.PartContext.MissingSequenceNums)[start:min],
 					MissingSequenceNumberOffsets: (cp.PartContext.MissingSequenceNumOffsets)[start:min],
 					TransactionId:                txId,
+					NumPackets:                   int64(cp.PartContext.RecvPackets),
+					RequestSequenceId:            requestSequenceId,
 				}
 				// log.Info("PACKET")
 				// log.Info(p)
@@ -381,7 +386,7 @@ func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 					break
 				}
 			}
-
+			requestSequenceId++
 		}
 	}
 }

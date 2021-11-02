@@ -110,7 +110,6 @@ func (p *PartsConn) Read(b []byte) (n int, err error) {
 			return 0, err
 		}
 		p.controlplane.SetPartContext(partContext)
-		p.controlplane.Ratecontrol.IsServer = true
 		p.controlplane.Ratecontrol.Start()
 		p.controlplane.StartReadpart()
 		_, err = p.dataplane.ReadPart(partContext)
@@ -118,11 +117,7 @@ func (p *PartsConn) Read(b []byte) (n int, err error) {
 			return 0, err
 		}
 		p.controlplane.FinishReadpart()
-		elapsedTime := time.Since(p.controlplane.Ratecontrol.FirstPacketTime)
-		log.Infof("Time of first packet %s", p.controlplane.Ratecontrol.FirstPacketTime)
 		// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
-		averageBandwidth := int64((float64(partContext.NumPackets*p.controlplane.Ratecontrol.PacketSize/1024/1024) * 8) / float64(elapsedTime/time.Second))
-		log.Infof("Part %d took %s with average bandwidth %dMbit/s for %d bytes", partContext.PartId, elapsedTime, averageBandwidth, len(partContext.Data))
 		log.Infof("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
 		return len(b), nil
 		// p.partContext = partContext ?
@@ -141,7 +136,6 @@ func (p *PartsConn) Write(b []byte) (n int, err error) {
 			return 0, err
 		}
 		p.controlplane.SetPartContext(partContext)
-		p.controlplane.Ratecontrol.IsServer = false
 		p.controlplane.Ratecontrol.Start()
 		log.Infof("Writing %d packets", partContext.NumPackets)
 		// b.packets[b.activePartCount] = make([][]byte, len(part)/PACKET_SIZE)
@@ -154,10 +148,11 @@ func (p *PartsConn) Write(b []byte) (n int, err error) {
 		if err != nil {
 			return 0, err
 		}
-		p.controlplane.FinishWritepart()
+
 		log.Infof("Wrote %d packets, partLen %d", partContext.NumPackets, len(b))
-		p.controlplane.Ratecontrol.Stop()
 		p.dataplane.RetransferMissingPackets()
+		p.controlplane.Ratecontrol.Stop()
+		p.controlplane.FinishWritepart()
 		return int(n), nil
 	} else {
 		partid := p.controlplane.NextPartId()

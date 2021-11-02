@@ -34,7 +34,7 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			buf := make([]byte, 20000000)
+			buf := make([]byte, 2000000000)
 			n, err := conn2.Write(buf)
 			if err != nil {
 				log.Fatal(err)
@@ -43,7 +43,7 @@ func main() {
 
 		}()
 		err = conn.Accept()
-		buf := make([]byte, 20000000)
+		buf := make([]byte, 2000000000)
 		n, err := conn.Read(buf)
 		if err != nil {
 			log.Fatal(err)

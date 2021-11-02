@@ -136,7 +136,7 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 		// log.Infof("Appending missing sequence number %d to %d for highest number %d", p.SequenceNumber-off, p.SequenceNumber, highestSequenceNumber)
 	} else if diff < 0 {
 		// retransfer = true
-		log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
+		// log.Infof("Received retransferred sequence number %d", p.SequenceNumber)
 		// log.Infof("Received retransfer md5 %x for sequenceNumber %d", md5.Sum(*packetBuffer), p.SequenceNumber)
 
 		index := utils.IndexOfMin(p.SequenceNumber, b.MissingSequenceNums)
@@ -147,7 +147,7 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 			if b.MissingSequenceNumOffsets[index] == 0 {
 				b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
 				b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
-				// log.Warnf("Removed offset from missingNumbers at index %d", index)
+				// log.Warnf("Removed offset from missingNumbers at index %d, %d remaining", index, len(b.MissingSequenceNumOffsets))
 				// log.Error(b.MissingSequenceNums)
 				// log.Error(b.MissingSequenceNumOffsets)
 				// log.Errorf("Got %d from %d packets", b.RecvPackets, b.NumPackets)

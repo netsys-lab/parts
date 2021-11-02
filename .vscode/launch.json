@@ -10,7 +10,8 @@
         "request": "launch",
         "mode": "debug",
         "program": "${workspaceFolder}/example/",
-        "go.alternateTools": { "go": "/usr/local/go/bin/go" }
+        "go.alternateTools": { "go": "/usr/local/go/bin/go" },
+        "env": {"ENABLE_FAST": true}
     },
     ]
 }

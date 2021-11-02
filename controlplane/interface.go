@@ -24,6 +24,8 @@ type PartAckPacket struct {
 	MissingSequenceNumbers       []int64
 	MissingSequenceNumberOffsets []int64
 	TransactionId                int64
+	RequestSequenceId            int
+	NumPackets                   int64
 	PartFinished                 bool
 }
 
