@@ -38,7 +38,7 @@ func NewControlPlane(
 	cp := ControlPlane{
 		Dataplane:                 dp,
 		packetChan:                packetChan,
-		stopCtrlPacketsChan:       make(chan bool),
+		stopCtrlPacketsChan:       make(chan bool, 0),
 		stopRetransferPacketsChan: make(chan bool),
 		// TODO: Fix these parameters
 		Ratecontrol: NewRateControl(),
@@ -90,33 +90,53 @@ func (cp *ControlPlane) StartReadpart() {
 }
 
 func (cp *ControlPlane) FinishWritepart() {
-	cp.stopCtrlPacketsChan <- true
+	log.Infof("CP %p", &cp.stopCtrlPacketsChan)
+	// cp.stopCtrlPacketsChan <- true TODO: Fix this channel issue
 }
 
 func (cp *ControlPlane) FinishReadpart() {
+	cp.sendPartFinish() // TODO: error handling
 	cp.stopRetransferPacketsChan <- true
 }
 
 func (cp *ControlPlane) HandleAckPackets(stopChan *chan bool) {
+	ch := make(chan []byte)
+	eCh := make(chan error)
+	go func() {
+		for {
+			buffer := make([]byte, dataplane.PACKET_SIZE)
+			_, err := cp.Dataplane.Read(buffer)
+			if err != nil {
+				eCh <- err
+			} else {
+				ch <- buffer
+			}
+		}
+	}()
+	var err error
 	for {
 		select {
 		case <-*stopChan:
 			return
-		default:
+		case err = <-eCh:
+			if err != nil {
+				log.Error("Failed to read ack packet %v", err)
+				continue
+			}
+			break
+		case buffer := <-ch:
+			log.Infof("CP %p", stopChan)
+			ackPacket, err := cp.parsePartAckPacket(buffer)
+			if err != nil {
+				log.Error("Failed to read ack packet %v", err)
+				continue
+			}
+			finished := cp.handlePartAckPacket(ackPacket)
+			if finished {
+				return
+			}
 			break
 		}
-		buffer := make([]byte, dataplane.PACKET_SIZE)
-		_, err := cp.Dataplane.Read(buffer)
-		if err != nil {
-			log.Error("Failed to read ack packet %v", err)
-			continue
-		}
-		ackPacket, err := cp.parsePartAckPacket(buffer)
-		if err != nil {
-			log.Error("Failed to read ack packet %v", err)
-			continue
-		}
-		cp.handlePartAckPacket(ackPacket)
 	}
 
 }
@@ -273,12 +293,12 @@ func (cp *ControlPlane) AwaitHandshake(b []byte) (*dataplane.PartContext, error)
 }
 
 // Collecting retransfers
-func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) {
+func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) bool {
 	// Part finished, can get to next part
 	if p.PartFinished {
 		cp.state = CP_STATE_PENDING
 		cp.Dataplane.SetState(dataplane.DP_STATE_PENDING)
-		return
+		return true
 		// partsConn.mode = MODE_DONE
 		// continue
 	}
@@ -306,6 +326,29 @@ func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) {
 		}
 
 	}
+
+	return false
+}
+
+func (cp *ControlPlane) sendPartFinish() error {
+	var network bytes.Buffer        // Stand-in for a network connection
+	enc := gob.NewEncoder(&network) // Will write to network.
+	// log.Infof("Requesting from %d to %d having %d (%d), partId %d", start, min, len(partsConn.partContext.MissingSequenceNums), partsConn.partContext.MissingSequenceNums, partsConn.PartId)
+	p := dataplane.PartRequestPacket{
+		PartId:            cp.PartContext.PartId,
+		NumPacketsPerTx:   0,
+		PacketTxIndex:     0,
+		TransactionId:     0,
+		NumPackets:        int64(cp.PartContext.RecvPackets),
+		RequestSequenceId: 0,
+		PartFinished:      true,
+	}
+	err := enc.Encode(p)
+	if err != nil {
+		return err
+	}
+	_, err = cp.Dataplane.Write(network.Bytes())
+	return err
 }
 
 func (cp *ControlPlane) parsePartAckPacket(packet []byte) (*PartAckPacket, error) {

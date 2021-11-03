@@ -26,7 +26,8 @@ const (
 )
 
 const (
-	PACKET_SIZE = 1400
+	PACKET_SIZE         = 1400
+	PACKET_PAYLOAD_SIZE = 1200 // TODO: Calculate this live...
 )
 
 type SCIONDataplane struct {
@@ -198,6 +199,7 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 		// TODO: Make this dependent on Acks
 		time.Sleep(100 * time.Millisecond)
 	}
+	log.Debugf("Finished retransfer")
 }
 
 func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {

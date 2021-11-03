@@ -103,7 +103,7 @@ func (p *PartsConn) Read(b []byte) (n int, err error) {
 	// p.PartId = partId
 
 	// Check if Read is a single packet or larger one
-	if len(b) >= 1200 { // TODO correct size here...
+	if len(b) >= dataplane.PACKET_PAYLOAD_SIZE { // TODO correct size here...
 		// p.controlplane.A
 		partContext, err := p.controlplane.AwaitHandshake(b)
 		if err != nil {
@@ -130,7 +130,7 @@ func (p *PartsConn) Read(b []byte) (n int, err error) {
 func (p *PartsConn) Write(b []byte) (n int, err error) {
 	// TODO: Save activePartCount and increase immediatly
 	// TODO: Not overwrite if actually sending
-	if len(b) >= 1200 {
+	if len(b) >= dataplane.PACKET_PAYLOAD_SIZE {
 		partContext, err := p.controlplane.Handshake(b)
 		if err != nil {
 			return 0, err

@@ -5,12 +5,32 @@
     "version": "0.2.0",
     "configurations": [
     {
-        "name": "Launch file",
+        "name": "Launch Local",
         "type": "go",
         "request": "launch",
         "mode": "debug",
-        "program": "${workspaceFolder}/example/",
+        "program": "${workspaceFolder}/example/local/",
         "go.alternateTools": { "go": "/usr/local/go/bin/go" },
+        "env": {"ENABLE_FAST": true}
+    },
+    {
+        "name": "Filetransfer server",
+        "type": "go",
+        "request": "launch",
+        "mode": "debug",
+        "program": "${workspaceFolder}/example/filetransfer/",
+        "go.alternateTools": { "go": "/usr/local/go/bin/go" },
+        "args": ["-mode=server","-server=19-ffaa:1:cf1,[127.0.0.1]:8000", "-path=./output.file"],
+        "env": {"ENABLE_FAST": true}
+    },
+    {
+        "name": "Filetransfer client",
+        "type": "go",
+        "request": "launch",
+        "mode": "debug",
+        "program": "${workspaceFolder}/example/filetransfer/",
+        "go.alternateTools": { "go": "/usr/local/go/bin/go" },
+        "args": ["-mode=client", "-server=19-ffaa:1:cf1,[127.0.0.1]:8000", "-client=19-ffaa:1:cf1,[127.0.0.1]:9000", "-path=./go1.17.2.linux-amd64.tar.gz"],
         "env": {"ENABLE_FAST": true}
     },
     ]
