@@ -1,11 +1,11 @@
 package controlplane
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	"github.com/martenwallewein/parts/dataplane"
+	log "github.com/sirupsen/logrus"
 )
 
 // #include <stdio.h>
@@ -79,10 +79,10 @@ func (rc *RateControl) AddAckMessage(msg *PartAckPacket) {
 			if rc.congestionWindow <= CONGESTION_WINDOW_MAX {
 				rc.congestionWindow = rc.congestionWindow - rc.congestionWindow/3
 			}
-			log.Printf("Moving to drain phase %d", rc.congestionWindow)
+			log.Debugf("Moving to drain phase %d", rc.congestionWindow)
 		} else {
 			rc.congestionWindow += rc.congestionWindow / 3
-			log.Printf("Increasing congestionWindow to %d", rc.congestionWindow)
+			log.Debugf("Increasing congestionWindow to %d", rc.congestionWindow)
 		}
 
 		break

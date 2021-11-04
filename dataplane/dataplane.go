@@ -156,7 +156,7 @@ func (sts *SCIONDataplane) Listen(addr string) error {
 }
 
 func (dp *SCIONDataplane) RetransferMissingPackets() {
-	log.Infof("Entering retransfer")
+	log.Debugf("Entering retransfer")
 	dp.state = DP_STATE_RETRANSFER
 	for dp.state == DP_STATE_RETRANSFER {
 		// log.Printf("Retransferring %d slots", len(dp.partContext.MissingSequenceNumOffsets))
@@ -205,7 +205,7 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {
 	var n uint64 = 0
 	sts.partContext = bc
-	log.Infof("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
+	log.Debugf("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
 	for i := 0; i < bc.NumPackets; i++ {
 		payload := bc.GetPayloadByPacketIndex(i)
 		buf := make([]byte, len(payload)+bc.PartsPacketPacker.GetHeaderLen())

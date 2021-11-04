@@ -48,7 +48,7 @@ func IndexOfMin(element int64, data []int64) int {
 func RemoveFromSlice(s []int64, i int64) []int64 {
 	index := IndexOf(i, s)
 	if index == -1 {
-		log.Infof("Received index -1 for val %d", i)
+		log.Errorf("Received index -1 for val %d", i)
 		return s
 	}
 	s[index] = s[len(s)-1]

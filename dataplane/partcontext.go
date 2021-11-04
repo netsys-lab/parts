@@ -86,9 +86,9 @@ func (b *PartContext) Prepare() {
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
 	b.NumPackets = utils.CeilForceInt(len(b.Data), b.PayloadLength)
 	b.RecommendedBufferSize = b.NumPackets * b.MaxPacketLength
-	log.Infof("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
-	log.Infof("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
-	log.Infof("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
+	log.Debugf("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
+	log.Debugf("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
+	log.Debugf("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
 
 	if b.TestingMode && !testingState.BufferCreated {
 		testingState.BufferCreated = true

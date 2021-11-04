@@ -400,6 +400,10 @@ func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 				min := utils.Min(start+missingNumsPerPacket, len(cp.PartContext.MissingSequenceNums))
 				var network bytes.Buffer        // Stand-in for a network connection
 				enc := gob.NewEncoder(&network) // Will write to network.
+				if start < min {
+					start = min
+					log.Debugf("start value too small for min, possible race condition occurred...")
+				}
 				// log.Infof("Requesting from %d to %d having %d (%d), partId %d", start, min, len(partsConn.partContext.MissingSequenceNums), partsConn.partContext.MissingSequenceNums, partsConn.PartId)
 				p := dataplane.PartRequestPacket{
 					PartId:                       cp.PartContext.PartId,

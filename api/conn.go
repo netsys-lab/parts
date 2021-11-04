@@ -118,7 +118,7 @@ func (p *PartsConn) Read(b []byte) (n int, err error) {
 		}
 		p.controlplane.FinishReadpart()
 		// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
-		log.Infof("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
+		log.Debugf("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
 		return len(b), nil
 		// p.partContext = partContext ?
 	} else {
@@ -137,7 +137,7 @@ func (p *PartsConn) Write(b []byte) (n int, err error) {
 		}
 		p.controlplane.SetPartContext(partContext)
 		p.controlplane.Ratecontrol.Start()
-		log.Infof("Writing %d packets", partContext.NumPackets)
+		log.Debugf("Writing %d packets", partContext.NumPackets)
 		// b.packets[b.activePartCount] = make([][]byte, len(part)/PACKET_SIZE)
 		// TODO: Waiting queue
 		// TODO: sync write calls
@@ -149,7 +149,7 @@ func (p *PartsConn) Write(b []byte) (n int, err error) {
 			return 0, err
 		}
 
-		log.Infof("Wrote %d packets, partLen %d", partContext.NumPackets, len(b))
+		log.Debugf("Wrote %d packets, partLen %d", partContext.NumPackets, len(b))
 		p.dataplane.RetransferMissingPackets()
 		p.controlplane.Ratecontrol.Stop()
 		p.controlplane.FinishWritepart()
