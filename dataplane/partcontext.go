@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/martenwallewein/parts/utils"
+	"github.com/netsys-lab/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
 

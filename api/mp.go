@@ -3,8 +3,8 @@ package parts
 import (
 	"sync"
 
-	"github.com/martenwallewein/parts/dataplane"
-	"github.com/martenwallewein/parts/utils"
+	"github.com/netsys-lab/parts/dataplane"
+	"github.com/netsys-lab/parts/utils"
 )
 
 type MPOptions struct {

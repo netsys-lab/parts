@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/martenwallewein/parts/dataplane"
-	"github.com/martenwallewein/parts/utils"
+	"github.com/netsys-lab/parts/dataplane"
+	"github.com/netsys-lab/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
 

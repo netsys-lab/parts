@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/tagflag"
-	parts "github.com/martenwallewein/parts/api"
+	parts "github.com/netsys-lab/parts/api"
 	log "github.com/sirupsen/logrus"
 )
 

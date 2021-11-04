@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/martenwallewein/parts/dataplane"
+	"github.com/netsys-lab/parts/dataplane"
 	log "github.com/sirupsen/logrus"
 )
 

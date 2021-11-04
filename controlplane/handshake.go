@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 
-	"github.com/martenwallewein/parts/dataplane"
+	"github.com/netsys-lab/parts/dataplane"
 )
 
 type PartsHandshake struct {
