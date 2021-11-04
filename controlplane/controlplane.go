@@ -90,7 +90,7 @@ func (cp *ControlPlane) StartReadpart() {
 }
 
 func (cp *ControlPlane) FinishWritepart() {
-	log.Infof("CP %p", &cp.stopCtrlPacketsChan)
+	// log.Infof("CP %p", &cp.stopCtrlPacketsChan)
 	// cp.stopCtrlPacketsChan <- true TODO: Fix this channel issue
 }
 
@@ -125,7 +125,7 @@ func (cp *ControlPlane) HandleAckPackets(stopChan *chan bool) {
 			}
 			break
 		case buffer := <-ch:
-			log.Infof("CP %p", stopChan)
+			// log.Infof("CP %p", stopChan)
 			ackPacket, err := cp.parsePartAckPacket(buffer)
 			if err != nil {
 				log.Error("Failed to read ack packet %v", err)

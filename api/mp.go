@@ -29,7 +29,7 @@ func newPartsSocket(local string, options *MPOptions) *PartsSocket {
 func ListenMP(local string, options *MPOptions) (*PartsSocket, error) {
 	p := newPartsSocket(local, options)
 	for i := 0; i < p.options.NumConns; i++ {
-		conn, err := Listen(local) // TODO: Replace Port or use REUSE_PORT
+		conn, err := Listen(utils.IncreasePortInAddress(local, i+1)) // TODO: REUSE_PORT
 		if err != nil {
 			return nil, err
 		}
@@ -41,7 +41,7 @@ func ListenMP(local string, options *MPOptions) (*PartsSocket, error) {
 func DialMP(local, remote string, options *MPOptions) (*PartsSocket, error) {
 	p := newPartsSocket(local, options)
 	for i := 0; i < p.options.NumConns; i++ {
-		conn, err := Dial(local, remote) // TODO: Replace Port or use REUSE_PORT
+		conn, err := Dial(utils.IncreasePortInAddress(local, i+1), utils.IncreasePortInAddress(remote, i+1)) // TODO: REUSE_PORT
 		if err != nil {
 			return nil, err
 		}

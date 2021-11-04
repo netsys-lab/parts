@@ -2,9 +2,18 @@ package utils
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
+
+func IncreasePortInAddress(addr string, index int) string {
+	addrParts := strings.Split(addr, ":")
+	port, _ := strconv.Atoi(addrParts[len(addrParts)-1])
+	addrParts[len(addrParts)-1] = fmt.Sprintf("%d", port+index)
+	return strings.Join(addrParts, ":")
+}
 
 func IndexOf(element int64, data []int64) int {
 	for k, v := range data {
