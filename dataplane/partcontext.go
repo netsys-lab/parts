@@ -1,12 +1,11 @@
-package socket
+package dataplane
 
 import (
 	"net"
 	"os"
 	"sync"
-	"time"
 
-	"github.com/martenwallewein/parts/utils"
+	"github.com/netsys-lab/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -43,6 +42,7 @@ type PartContext struct {
 	currentSequenceNumber     int64
 	PartId                    int64
 	TestingMode               bool
+	RecvPackets               int
 }
 
 func (b *PartContext) GetNextSequenceNumber() int64 {
@@ -63,74 +63,20 @@ func (b *PartContext) SetPayloadByPacketIndex(i int, payload []byte) {
 }
 
 func (b *PartContext) WriteToConn(conn net.Conn, data []byte) (int, error) {
-	if b.TestingMode {
-		b.Lock()
-		start := testingState.TestingWriteIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		copy(testingState.TestingReceiveBuffer[start:end], data)
-		testingState.TestingWriteIndex++
-		log.Infof("Increase b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
-		b.Unlock()
-		return len(data), nil
-	} else {
-		return conn.Write(data)
-	}
+	return conn.Write(data)
+
 }
 
 func (b *PartContext) ReadFromConn(conn net.Conn, data []byte) (int, error) {
-	if b.TestingMode {
-		// log.Infof("Read called")
-		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
-			log.Infof("Check b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
-			time.Sleep(1000 * time.Millisecond)
-		}
-		// log.Infof("Read received")
-		b.Lock()
-		start := testingState.TestingReadIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		// log.Infof("Copy from %d to %d, %p", start, end, &testingState.TestingReceiveBuffer)
-		// log.Info(testingState.TestingReceiveBuffer[start:end])
-		copy(data, testingState.TestingReceiveBuffer[start:end])
-		testingState.TestingReadIndex++
-		b.Unlock()
-		return len(data), nil
-	} else {
-		return conn.Read(data)
-	}
+	return conn.Read(data)
 }
 
 func (b *PartContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr net.Addr) (int, error) {
-	if b.TestingMode {
-		b.Lock()
-		start := testingState.TestingWriteIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		copy(testingState.TestingReceiveBuffer[start:end], data)
-		// log.Infof("Copied from %d to %d, %p", start, end, &testingState.TestingReceiveBuffer)
-		// log.Info(testingState.TestingReceiveBuffer[start:end])
-		testingState.TestingWriteIndex++
-		// log.Infof("Increase b.TestingWriteIndex with %p and val %d", &testingState.TestingWriteIndex, testingState.TestingWriteIndex)
-		b.Unlock()
-		return len(data), nil
-	} else {
-		return conn.WriteTo(data, adr)
-	}
+	return conn.WriteTo(data, adr)
 }
 
 func (b *PartContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
-	if b.TestingMode {
-		for testingState.TestingReadIndex >= testingState.TestingWriteIndex {
-			time.Sleep(1 * time.Microsecond)
-		}
-		b.Lock()
-		start := testingState.TestingReadIndex * b.MaxPacketLength
-		end := utils.Min(start+b.MaxPacketLength, len(testingState.TestingReceiveBuffer))
-		copy(data, testingState.TestingReceiveBuffer[start:end])
-		testingState.TestingReadIndex++
-		b.Unlock()
-		return len(data), nil, nil
-	} else {
-		return conn.ReadFrom(data)
-	}
+	return conn.ReadFrom(data)
 }
 
 func (b *PartContext) Prepare() {
@@ -140,9 +86,9 @@ func (b *PartContext) Prepare() {
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
 	b.NumPackets = utils.CeilForceInt(len(b.Data), b.PayloadLength)
 	b.RecommendedBufferSize = b.NumPackets * b.MaxPacketLength
-	log.Infof("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
-	log.Infof("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
-	log.Infof("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
+	log.Debugf("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
+	log.Debugf("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
+	log.Debugf("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
 
 	if b.TestingMode && !testingState.BufferCreated {
 		testingState.BufferCreated = true
@@ -163,11 +109,14 @@ func (b *PartContext) SerializeRetransferPacket(packetBuffer *[]byte, sequenceNu
 	b.TransportPacketPacker.Pack(packetBuffer, b.PayloadLength+b.PartsPacketPacker.GetHeaderLen())
 }
 
-func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
+func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 	// log.Infof("Received ")
 
 	b.TransportPacketPacker.Unpack(packetBuffer)
-	p, _ := b.PartsPacketPacker.Unpack(packetBuffer, b) // TODO: Error handling
+	p, err := b.PartsPacketPacker.Unpack(packetBuffer, b)
+	if err != nil {
+		return err
+	}
 	diff := p.SequenceNumber - b.HighestSequenceNumber
 	// log.Infof("Got md5 for Payload %x ", md5.Sum((*packetBuffer)[:1320]))
 	// log.Infof("Received SequenceNumber %d", p.SequenceNumber)
@@ -196,9 +145,12 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 			// b.MissingSequenceNums[index]++
 			b.MissingSequenceNumOffsets[index]--
 			if b.MissingSequenceNumOffsets[index] == 0 {
-				// log.Warnf("Removing offset from missingNumbers at index %d", index)
 				b.MissingSequenceNums = utils.RemoveFromSliceByIndex(b.MissingSequenceNums, int64(index))
 				b.MissingSequenceNumOffsets = utils.RemoveFromSliceByIndex(b.MissingSequenceNumOffsets, int64(index))
+				// log.Warnf("Removed offset from missingNumbers at index %d, %d remaining", index, len(b.MissingSequenceNumOffsets))
+				// log.Error(b.MissingSequenceNums)
+				// log.Error(b.MissingSequenceNumOffsets)
+				// log.Errorf("Got %d from %d packets", b.RecvPackets, b.NumPackets)
 			}
 			b.Unlock()
 		} else {
@@ -218,4 +170,5 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) {
 	if diff > 0 {
 		b.HighestSequenceNumber = p.SequenceNumber // +=diff
 	}
+	return nil
 }

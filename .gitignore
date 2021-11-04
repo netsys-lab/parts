@@ -1,5 +1,7 @@
 parts
 *.file
 .idea
-testtransport
-filetransfer
+
+example/example
+example/filetransfer/*.gz
+example/filetransfer/filetransfer
