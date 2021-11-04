@@ -12,7 +12,7 @@ Instead of using a fixed buffer, parts adjusts its buffer for each part keeping 
 
 ### Single connection
 
-```go=
+```go
 // Listen
 conn, err := parts.Listen(flags.Server)
 if err != nil {
@@ -38,7 +38,7 @@ n, err := conn2.Write(buf)
 
 ### Multipath Connection (under construction...)
 
-```go=
+```go
 // Listen
 socket, err := parts.ListenMP(flags.Server, &parts.MPOptions{
     NumConns: flags.NumCons,
