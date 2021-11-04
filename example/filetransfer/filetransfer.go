@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/gob"
 	"io/ioutil"
-	"time"
 
 	"github.com/anacrolix/tagflag"
 	parts "github.com/martenwallewein/parts/api"
@@ -88,7 +87,6 @@ func main() {
 			log.Fatal(err)
 		}
 
-		time.Sleep(1 * time.Second)
 		log.Infof("Starting file transfer...")
 		_, err = socket.Write(file)
 		if err != nil {
