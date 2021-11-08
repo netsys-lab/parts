@@ -128,6 +128,14 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 		if index < 0 {
 			b.MissingSequenceNums = append(b.MissingSequenceNums, p.SequenceNumber-(diff-1))
 			b.MissingSequenceNumOffsets = append(b.MissingSequenceNumOffsets, diff-1)
+			if diff > 100 {
+				log.Debugf("PartId %d/%d: Add %d to missing sequence number offsets for seqNumber %d having highest SequenceNumber %d", p.PartId, b.PartId, diff-1, p.SequenceNumber, b.HighestSequenceNumber)
+			}
+
+			// if p.SequenceNumber == 6024 {
+			//	log.Debugf("Setting highestSeqNumber from %d to 6024", b.HighestSequenceNumber)
+			//}
+			b.HighestSequenceNumber = p.SequenceNumber // TODO: Why do we need this duplicated here?
 		}
 
 		b.Unlock()
@@ -166,10 +174,15 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 	partStart := int(p.SequenceNumber-1) * b.PayloadLength
 	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
 	copy(b.Data[partStart:end], *packetBuffer)
+
 	// log.Infof("Copied %d bytes from %d to %d with payloadlen %d, md5 %x", len(b.Data[partStart:end]), partStart, end, b.PayloadLength, md5.Sum(b.Data[partStart:end]))
 	// os.Exit(1)
 	if diff > 0 {
+		//if p.SequenceNumber == 6024 {
+		//	log.Debugf("Setting highestSeqNumber from %d to 6024", b.HighestSequenceNumber)
+		//}
 		b.HighestSequenceNumber = p.SequenceNumber // +=diff
+
 	}
 	return nil
 }

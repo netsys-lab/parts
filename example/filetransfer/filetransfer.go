@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/gob"
 	"io/ioutil"
+	"time"
 
 	"github.com/anacrolix/tagflag"
 	parts "github.com/netsys-lab/parts/api"
@@ -89,6 +90,7 @@ func main() {
 		}
 
 		log.Infof("Starting file transfer...")
+		time.Sleep(1 * time.Second)
 		_, err = socket.Write(file)
 		if err != nil {
 			log.Fatal(err)
