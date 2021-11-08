@@ -319,10 +319,10 @@ func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) bool {
 		// }
 		index := utils.IndexOf(v, cp.PartContext.MissingSequenceNums)
 		if index < 0 {
-			cp.Lock()
-			cp.PartContext.MissingSequenceNums = append(cp.PartContext.MissingSequenceNums, v)
-			cp.PartContext.MissingSequenceNumOffsets = append(cp.PartContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[i])
-			cp.Unlock()
+			cp.PartContext.Lock()
+			cp.PartContext.MissingSequenceNums = utils.AppendIfMissing(cp.PartContext.MissingSequenceNums, v)
+			cp.PartContext.MissingSequenceNumOffsets = utils.AppendIfMissing(cp.PartContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[i])
+			cp.PartContext.Unlock()
 		}
 
 	}
@@ -396,14 +396,16 @@ func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 			// log.Infof("Having %d missing Sequence Numbers for con index %d", len(cp.PartContext.MissingSequenceNums), 0)
 			start := 0
 			index := 0
+			cp.PartContext.Lock()
 			for len(cp.PartContext.MissingSequenceNums) == 0 || missingNumIndex < len(cp.PartContext.MissingSequenceNums) {
 				min := utils.Min(start+missingNumsPerPacket, len(cp.PartContext.MissingSequenceNums))
 				var network bytes.Buffer        // Stand-in for a network connection
 				enc := gob.NewEncoder(&network) // Will write to network.
-				if start < min {
+				if start > min {
 					start = min
-					log.Debugf("start value too small for min, possible race condition occurred...")
+					log.Infof("start value too small for min, possible race condition occurred...")
 				}
+
 				// log.Infof("Requesting from %d to %d having %d (%d), partId %d", start, min, len(partsConn.partContext.MissingSequenceNums), partsConn.partContext.MissingSequenceNums, partsConn.PartId)
 				p := dataplane.PartRequestPacket{
 					PartId:                       cp.PartContext.PartId,
@@ -433,6 +435,7 @@ func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 					break
 				}
 			}
+			cp.PartContext.Unlock()
 			requestSequenceId++
 		}
 	}

@@ -1,8 +1,8 @@
 package dataplane
 
 import (
+	"errors"
 	"net"
-	"os"
 	"sync"
 
 	"github.com/netsys-lab/parts/utils"
@@ -154,10 +154,11 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 			}
 			b.Unlock()
 		} else {
-			log.Errorf("Got retransfer packet for sequenceNumber %d that was not handled properly", p.SequenceNumber)
-			log.Error(b.MissingSequenceNums)
-			log.Error(b.MissingSequenceNumOffsets)
-			os.Exit(1)
+			log.Debugf("Warn: Got retransfer packet for sequenceNumber %d that was not handled properly", p.SequenceNumber)
+			// log.Error(b.MissingSequenceNums)
+			// log.Error(b.MissingSequenceNumOffsets)
+			// os.Exit(1)
+			return errors.New("Duplicate Retransfer")
 		}
 
 	}
