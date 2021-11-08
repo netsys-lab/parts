@@ -320,8 +320,10 @@ func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) bool {
 		index := utils.IndexOf(v, cp.PartContext.MissingSequenceNums)
 		if index < 0 {
 			cp.PartContext.Lock()
-			cp.PartContext.MissingSequenceNums = utils.AppendIfMissing(cp.PartContext.MissingSequenceNums, v)
-			cp.PartContext.MissingSequenceNumOffsets = utils.AppendIfMissing(cp.PartContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[i])
+			cp.PartContext.MissingSequenceNums = append(cp.PartContext.MissingSequenceNums, v)
+			cp.PartContext.MissingSequenceNumOffsets = append(cp.PartContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[i])
+			//cp.PartContext.MissingSequenceNums = utils.AppendIfMissing(cp.PartContext.MissingSequenceNums, v)
+			//cp.PartContext.MissingSequenceNumOffsets = utils.AppendIfMissing(cp.PartContext.MissingSequenceNumOffsets, p.MissingSequenceNumberOffsets[i])
 			cp.PartContext.Unlock()
 		}
 
@@ -364,7 +366,7 @@ func (cp *ControlPlane) parsePartAckPacket(packet []byte) (*PartAckPacket, error
 
 func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 	// TODO: After x packets, or timeout after x milliseconds
-	ticker := time.NewTicker(10 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
 	done := make(chan bool)
 	// log.Infof("In Call of requestRetransfers %p", missingNums)
 	// log.Infof("In Call of requestRetransfers go routine %p", missingNums)

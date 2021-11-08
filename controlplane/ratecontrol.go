@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/netsys-lab/parts/dataplane"
+	"github.com/netsys-lab/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -33,6 +34,7 @@ const (
 	RC_STATE_DRAIN                = 2
 	RC_STATE_PROBE                = 3
 	RC_STATE_IDLE                 = 4
+	DRAIN_INCREASE_WINDOW         = 10
 )
 
 type RateControl struct {
@@ -45,6 +47,10 @@ type RateControl struct {
 	packetLossPercent       int64 // between 1 and 100
 	windowCompletionTime    time.Duration
 	lastMissingSequenceNums int64
+	curNumMissingPackets    int64
+	curNumCheckedPackets    int64
+	lastNumMissingPackets   int64
+	drainIncreaseCount      int64
 }
 
 func NewRateControl() *RateControl {
@@ -64,29 +70,65 @@ func (rc *RateControl) AddAckMessage(msg *PartAckPacket) {
 	// Check if an Ack is missing
 	// if (rc.lastPacketTxIndex + 1) == msg.RequestSequenceId {
 	//if rc.lastIntervalPackets > 0 {
-	rc.packetLossPercent = int64(len(msg.MissingSequenceNumbers)) - rc.lastMissingSequenceNums // TODO: Correct size // ((rc.lastIntervalPackets - int64(msg.NumPacketsPerTx)) * 100) / rc.lastIntervalPackets
-	// log.Printf("Got %d for packetloss", rc.packetLossPercent)
-	//}
-	//} else { // Here we have the case where one ACK is missing
-	// TODO: Fix this
-	//}
+	// Packet x/x
+	rc.curNumMissingPackets += utils.Sum(msg.MissingSequenceNumberOffsets)
+	if msg.PacketTxIndex >= (msg.NumPacketsPerTx - 1) {
+		missingPackets := rc.curNumMissingPackets - rc.lastNumMissingPackets
+		// rc.packetLossPercent = int64(len(msg.MissingSequenceNumbers)) - rc.lastMissingSequenceNums // TODO: Correct size // ((rc.lastIntervalPackets - int64(msg.NumPacketsPerTx)) * 100) / rc.lastIntervalPackets
 
-	switch rc.state {
-	case RC_STATE_STARTUP:
-		if rc.packetLossPercent >= PACKET_LOSS_THRESHOLD_PERCENT || rc.congestionWindow > CONGESTION_WINDOW_MAX {
-			// Go to drain phase, remove congestionwindow
-			rc.state = RC_STATE_DRAIN
-			if rc.congestionWindow <= CONGESTION_WINDOW_MAX {
-				rc.congestionWindow = rc.congestionWindow - rc.congestionWindow/3
-			}
-			log.Debugf("Moving to drain phase %d", rc.congestionWindow)
-		} else {
-			rc.congestionWindow += rc.congestionWindow / 3
-			log.Debugf("Increasing congestionWindow to %d", rc.congestionWindow)
+		rc.packetLossPercent = (missingPackets * 100) / (msg.NumPackets - rc.curNumCheckedPackets)
+		if rc.packetLossPercent > 0 {
+			log.Debugf("Calculating missPackets %d * 100 / %d - %d ", missingPackets, msg.NumPackets, rc.curNumCheckedPackets)
+			log.Debugf("Got %d for packetloss", rc.packetLossPercent)
 		}
+		rc.lastNumMissingPackets = rc.curNumMissingPackets
+		rc.curNumMissingPackets = 0
+		rc.curNumCheckedPackets = msg.NumPackets
 
-		break
+		//}
+		//} else { // Here we have the case where one ACK is missing
+		// TODO: Fix this
+		//}
+
+		switch rc.state {
+		case RC_STATE_DRAIN:
+			if rc.packetLossPercent >= PACKET_LOSS_THRESHOLD_PERCENT {
+				rc.congestionWindow = rc.congestionWindow - rc.congestionWindow/3
+				log.Debugf("Decreasing window in drain phase to  %d", rc.congestionWindow)
+				rc.drainIncreaseCount = 0
+			} else {
+				rc.drainIncreaseCount += 1
+				// no packet loss, increase window
+				if rc.drainIncreaseCount%DRAIN_INCREASE_WINDOW == 0 {
+					rc.congestionWindow += rc.congestionWindow / 5
+					log.Debugf("Increasing congestion window in drain phase to %d", rc.congestionWindow)
+
+				}
+			}
+			break
+		case RC_STATE_STARTUP:
+			if rc.congestionWindow > CONGESTION_WINDOW_MAX {
+				rc.congestionWindow = CONGESTION_WINDOW_MAX
+				break
+			}
+			if rc.packetLossPercent >= PACKET_LOSS_THRESHOLD_PERCENT {
+				// Go to drain phase, remove congestionwindow
+				rc.state = RC_STATE_DRAIN
+				if rc.congestionWindow <= CONGESTION_WINDOW_MAX {
+					rc.congestionWindow = rc.congestionWindow - rc.congestionWindow/3
+				} else {
+
+				}
+				log.Debugf("Moving to drain phase %d", rc.congestionWindow)
+			} else {
+				rc.congestionWindow += rc.congestionWindow / 3
+				log.Debugf("Increasing congestionWindow to %d", rc.congestionWindow)
+			}
+
+			break
+		}
 	}
+
 	rc.lastMissingSequenceNums = int64(len(msg.MissingSequenceNumbers))
 	rc.lastPacketTxIndex = msg.RequestSequenceId
 	rc.lastIntervalBytes = 0

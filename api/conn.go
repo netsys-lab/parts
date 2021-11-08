@@ -1,7 +1,6 @@
 package parts
 
 import (
-	"crypto/md5"
 	"net"
 	"sync"
 	"time"
@@ -118,7 +117,7 @@ func (p *PartsConn) Read(b []byte) (n int, err error) {
 		}
 		p.controlplane.FinishReadpart()
 		// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
-		log.Debugf("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
+		// log.Debugf("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
 		return len(b), nil
 		// p.partContext = partContext ?
 	} else {

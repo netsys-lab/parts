@@ -34,6 +34,7 @@ func main() {
 		DisableColors: false,
 		FullTimestamp: true,
 	})
+	log.SetLevel(log.DebugLevel)
 	tagflag.Parse(&flags)
 	log.Info(flags)
 	log.Info("Starting filetransfer")
@@ -102,7 +103,7 @@ func outgoingHandshake(socket *parts.PartsSocket, file []byte) (*MetaPacket, err
 		FileSize: len(file),
 		Md5:      md5.Sum(file),
 	}
-
+	log.Debugf("GOt md5")
 	var network bytes.Buffer
 	enc := gob.NewEncoder(&network)
 	err := enc.Encode(metaPacket)
@@ -114,11 +115,14 @@ func outgoingHandshake(socket *parts.PartsSocket, file []byte) (*MetaPacket, err
 		return nil, err
 	}
 
+	log.Debugf("Wrote packet")
+
 	buf := make([]byte, 1000)
 	_, err = socket.Read(buf)
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("FInished outgoinf")
 	return &metaPacket, nil
 }
 

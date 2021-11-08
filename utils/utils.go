@@ -112,6 +112,14 @@ func AppendIfMissing(slice []int64, i int64) []int64 {
 	return append(slice, i)
 }
 
+func Sum(array []int64) int64 {
+	var result int64 = 0
+	for _, v := range array {
+		result += v
+	}
+	return result
+}
+
 func ByteCountSI(b int64) string {
 	const unit = 1000
 	if b < unit {

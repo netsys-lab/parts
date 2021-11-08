@@ -2,7 +2,6 @@ package dataplane
 
 import (
 	"context"
-	"crypto/md5"
 	"encoding/binary"
 	"net"
 	"sync"
@@ -166,6 +165,11 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 				log.Fatal("error 0 sequenceNumber")
 			}
 
+			if i >= len(dp.partContext.MissingSequenceNumOffsets) {
+				log.Errorf("Mismatch missingSequenceNums %d and offsets %d", len(dp.partContext.MissingSequenceNums), len(dp.partContext.MissingSequenceNumOffsets))
+				break
+			}
+
 			off := int(dp.partContext.MissingSequenceNumOffsets[i])
 			// log.Infof("Sending back %d with offset %d", v-1, off)
 			for j := 0; j < off; j++ {
@@ -205,7 +209,7 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {
 	var n uint64 = 0
 	sts.partContext = bc
-	log.Debugf("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
+	// log.Debugf("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
 	for i := 0; i < bc.NumPackets; i++ {
 		payload := bc.GetPayloadByPacketIndex(i)
 		buf := make([]byte, len(payload)+bc.PartsPacketPacker.GetHeaderLen())
