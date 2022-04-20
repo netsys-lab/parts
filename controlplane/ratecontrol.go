@@ -96,11 +96,6 @@ func (rc *RateControl) AddAckMessage(msg *PartAckPacket) {
 		rc.curNumMissingPackets = 0
 		rc.curNumCheckedPackets = msg.NumPackets
 
-		//}
-		//} else { // Here we have the case where one ACK is missing
-		// TODO: Fix this
-		//}
-
 		switch rc.state {
 		case RC_STATE_PROBE:
 			if rc.packetLossPercent >= PACKET_LOSS_THRESHOLD_PERCENT {
