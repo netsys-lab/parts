@@ -209,6 +209,7 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {
 	var n uint64 = 0
 	sts.partContext = bc
+	log.Debugf("Writing part %d", bc.PartId)
 	// log.Debugf("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
 	for i := 0; i < bc.NumPackets; i++ {
 		payload := bc.GetPayloadByPacketIndex(i)
@@ -308,7 +309,7 @@ func (sts *SCIONDataplane) WriteSingle(data []byte, partId int64) (uint64, error
 }
 func (sts *SCIONDataplane) ReadPart(bc *PartContext) (uint64, error) {
 
-	buffer := make([]byte, bc.RecommendedBufferSize)
+	buffer := bc.Buffer // make([]byte, bc.RecommendedBufferSize) // TODO: Move this into  ControlPlane.AwaitHandshake
 	var n uint64 = 0
 	for i := 0; i < bc.NumPackets; i++ {
 		start := i * bc.MaxPacketLength

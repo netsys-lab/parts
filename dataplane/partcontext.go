@@ -36,6 +36,7 @@ type PartContext struct {
 	RecommendedBufferSize     int
 	HeaderLength              int
 	Data                      []byte
+	Buffer                    []byte
 	HighestSequenceNumber     int64
 	MissingSequenceNums       []int64
 	MissingSequenceNumOffsets []int64
@@ -177,10 +178,11 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 
 	// log.Infof("Copied %d bytes from %d to %d with payloadlen %d, md5 %x", len(b.Data[partStart:end]), partStart, end, b.PayloadLength, md5.Sum(b.Data[partStart:end]))
 	// os.Exit(1)
+	if p.SequenceNumber == 6025 {
+		log.Debugf("GOTCHA")
+	}
 	if diff > 0 {
-		//if p.SequenceNumber == 6024 {
-		//	log.Debugf("Setting highestSeqNumber from %d to 6024", b.HighestSequenceNumber)
-		//}
+
 		b.HighestSequenceNumber = p.SequenceNumber // +=diff
 
 	}

@@ -1,6 +1,7 @@
 package parts
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/netsys-lab/parts/dataplane"
@@ -81,6 +82,7 @@ func (p *PartsSocket) Write(b []byte) (n int, err error) {
 		for i := 0; i < len(conns); i++ {
 			wg.Add(1)
 			go func(index int, wg *sync.WaitGroup) {
+				fmt.Printf("Writing part over index %d", index)
 				start := partLen * index
 				end := utils.Min(start+partLen, bLen)
 				conns[index].Write(b[start:end]) // PartIds positive TODO: Error handling

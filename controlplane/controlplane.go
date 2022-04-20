@@ -49,6 +49,7 @@ func NewControlPlane(
 
 func (cp *ControlPlane) SetPartContext(p *dataplane.PartContext) {
 	cp.PartContext = p
+	cp.Ratecontrol.SetPartContext(p)
 }
 
 func (cp *ControlPlane) SetState(state int) {
@@ -264,13 +265,6 @@ func (cp *ControlPlane) AwaitHandshake(b []byte) (*dataplane.PartContext, error)
 	}
 	retHs.LocalAddr = cp.Dataplane.LocalAddr().String()
 
-	err = retHs.Encode()
-	if err != nil {
-		return nil, err
-	}
-
-	cp.Dataplane.Write(retHs.raw)
-
 	partContext := dataplane.PartContext{
 		PartsPacketPacker:         dataplane.NewBinaryPartsPacketPacker(),
 		TransportPacketPacker:     dataplane.NewSCIONPacketPacker(),
@@ -288,6 +282,14 @@ func (cp *ControlPlane) AwaitHandshake(b []byte) (*dataplane.PartContext, error)
 	partContext.TransportPacketPacker.SetLocal(cp.Dataplane.LocalAddr())
 	partContext.TransportPacketPacker.SetRemote(cp.Dataplane.RemoteAddr())
 	partContext.Prepare()
+	partContext.Buffer = make([]byte, partContext.RecommendedBufferSize)
+
+	err = retHs.Encode()
+	if err != nil {
+		return nil, err
+	}
+
+	cp.Dataplane.Write(retHs.raw)
 
 	return &partContext, nil
 }

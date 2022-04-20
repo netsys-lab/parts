@@ -53,6 +53,7 @@ type RateControl struct {
 	drainIncreaseCount      int64
 	drainLossCount          int64
 	probeIncreaseCount      int64
+	partContext             *dataplane.PartContext
 }
 
 func NewRateControl() *RateControl {
@@ -63,6 +64,10 @@ func NewRateControl() *RateControl {
 	}
 
 	return &rc
+}
+
+func (rc *RateControl) SetPartContext(p *dataplane.PartContext) {
+	rc.partContext = p
 }
 
 // This happens every 5-10 milliseconds, so we ensure its a more or less
@@ -84,17 +89,12 @@ func (rc *RateControl) AddAckMessage(msg *PartAckPacket) {
 		}
 
 		if rc.packetLossPercent > 0 {
-			log.Debugf("Calculating missPackets %d * 100 / %d - %d ", missingPackets, msg.NumPackets, rc.curNumCheckedPackets)
-			log.Debugf("Got %d for packetloss", rc.packetLossPercent)
+			log.Debugf("PartId %d: Calculating missPackets %d * 100 / %d - %d ", rc.partContext.PartId, missingPackets, msg.NumPackets, rc.curNumCheckedPackets)
+			log.Debugf("PartId %d: Got %d for packetloss", rc.partContext.PartId, rc.packetLossPercent)
 		}
 		rc.lastNumMissingPackets = rc.curNumMissingPackets
 		rc.curNumMissingPackets = 0
 		rc.curNumCheckedPackets = msg.NumPackets
-
-		//}
-		//} else { // Here we have the case where one ACK is missing
-		// TODO: Fix this
-		//}
 
 		switch rc.state {
 		case RC_STATE_PROBE:
