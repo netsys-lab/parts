@@ -3,6 +3,8 @@ package controlplane
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -91,12 +93,24 @@ func (cp *ControlPlane) StartReadpart() {
 }
 
 func (cp *ControlPlane) FinishWritepart() {
-	// log.Infof("CP %p", &cp.stopCtrlPacketsChan)
-	// cp.stopCtrlPacketsChan <- true TODO: Fix this channel issue
+	log.Infof("CP %p", &cp.stopCtrlPacketsChan)
+	select {
+	case cp.stopRetransferPacketsChan <- true:
+		fmt.Println("sent message")
+	default:
+		fmt.Println("no message sent")
+	}
+
 }
 
 func (cp *ControlPlane) FinishReadpart() {
-	cp.sendPartFinish() // TODO: error handling
+	err := cp.sendPartFinish() // TODO: error handling
+	if err != nil {
+		log.Error(err)
+	} else {
+		log.Infof("Sent part Finished packet")
+	}
+
 	cp.stopRetransferPacketsChan <- true
 }
 
@@ -133,6 +147,8 @@ func (cp *ControlPlane) HandleAckPackets(stopChan *chan bool) {
 				continue
 			}
 			finished := cp.handlePartAckPacket(ackPacket)
+			log.Infof("HandlePartAckPacket result %b", finished)
+			log.Error("%v", ackPacket)
 			if finished {
 				return
 			}
@@ -151,7 +167,7 @@ func (cp *ControlPlane) readControlPackets(stopChan *chan bool) {
 			switch cp.state {
 			// Must be new handshake packet
 			case CP_STATE_PENDING:
-				break
+				return
 			// Must be Ack packet
 			case CP_STATE_SENDING:
 				ackPacket, err := cp.parsePartAckPacket(packet)
@@ -167,8 +183,7 @@ func (cp *ControlPlane) readControlPackets(stopChan *chan bool) {
 }
 
 func (cp *ControlPlane) NextPartId() int64 {
-	cp.currentPartId += 1
-	return cp.currentPartId
+	return int64(rand.Uint64())
 }
 
 func (cp *ControlPlane) NextPartContext(data []byte) *dataplane.PartContext {
@@ -352,7 +367,10 @@ func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) bool {
 	// Part finished, can get to next part
 	if p.PartFinished {
 		cp.state = CP_STATE_PENDING
+		log.Warnf("%v", p)
 		cp.Dataplane.SetState(dataplane.DP_STATE_PENDING)
+		buf := make([]byte, 100)
+		cp.Dataplane.Write(buf)
 		return true
 		// partsConn.mode = MODE_DONE
 		// continue
@@ -405,6 +423,15 @@ func (cp *ControlPlane) sendPartFinish() error {
 		return err
 	}
 	_, err = cp.Dataplane.Write(network.Bytes())
+	if err != nil {
+		return err
+	}
+	buf := make([]byte, 100)
+	_, err = cp.Dataplane.Read(buf)
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
@@ -414,6 +441,7 @@ func (cp *ControlPlane) parsePartAckPacket(packet []byte) (*PartAckPacket, error
 	p := PartAckPacket{}
 	err := dec.Decode(&p)
 	if err != nil {
+		log.Error(packet)
 		return nil, err
 	}
 	return &p, nil
@@ -432,6 +460,7 @@ func (cp *ControlPlane) requestRetransfers(stopChan *chan bool) {
 		case <-done:
 			return
 		case <-*stopChan:
+			log.Warnf("Stopping Retransfer for partId %d", cp.PartContext.PartId)
 			return
 		case <-ticker.C:
 			if cp.PartContext == nil {

@@ -146,6 +146,7 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 		return err
 	}
 	diff := p.SequenceNumber - b.HighestSequenceNumber
+	log.Warnf("Got packet %v", p)
 	// log.Infof("Got md5 for Payload %x ", md5.Sum((*packetBuffer)[:1320]))
 	// log.Infof("Received SequenceNumber %d", p.SequenceNumber)
 	if diff > 1 {
@@ -223,7 +224,7 @@ func (b *PartContext) DeSerializeNewPacket(packetBuffer *[]byte) error {
 	// create buffer etc
 	b.PartId = p.PartId
 	b.PartSize = p.PartSize
-	log.Warnf("Setting net partId %d", b.PartId)
+	log.Warnf("Setting new partId %d", b.PartId)
 	b.NumPackets = p.PartPackets
 	b.PrepareNew()
 	b.Buffer = make([]byte, b.RecommendedBufferSize)

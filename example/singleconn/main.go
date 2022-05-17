@@ -42,7 +42,22 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		log.Infof("Read part successfully, got %d bytes and buflen %d", n, len(buf))
+
+		n, buf, err = conn.ReadPart()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Infof("Read part 2 successfully, got %d bytes and buflen %d", n, len(buf))
+
+		n2, err := conn.Write(buf)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Infof("Wrote part successfully, got %d bytes and buflen %d", n2, len(buf))
 
 	} else {
 		buf := make([]byte, 2000)
@@ -58,5 +73,23 @@ func main() {
 		}
 
 		log.Infof("Wrote part successfully, got %d bytes and buflen %d", n, len(buf))
+
+		n, err = conn.Write(buf)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Infof("Wrote part 2 successfully, got %d bytes and buflen %d", n, len(buf))
+
+		n2, buf2, err := conn.ReadPart()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Infof("Read part successfully, got %d bytes and buflen %d", n2, len(buf2))
 	}
 }
