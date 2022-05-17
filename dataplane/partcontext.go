@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/netsys-lab/parts/shared"
 	"github.com/netsys-lab/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -97,6 +98,7 @@ func (b *PartContext) Prepare() {
 		testingState.BufferCreated = true
 		testingState.TestingReceiveBuffer = make([]byte, b.RecommendedBufferSize)
 	}
+	b.AppId = shared.AppId
 
 }
 
