@@ -71,6 +71,12 @@ func Listen(localAddr string) (*PartsConn, error) {
 		return nil, err
 	}
 
+	// Setting dataplane remote
+	err = pc.controlplane.AwaitInitialHandshake()
+	if err != nil {
+		return nil, err
+	}
+
 	return pc, nil
 }
 
@@ -84,8 +90,7 @@ func Dial(localAddr, remoteAddr string) (*PartsConn, error) {
 		return nil, err
 	}
 
-	// Setting dataplane remote
-	err = pc.controlplane.InitialHandshake(make([]byte, 0))
+	err = pc.controlplane.InitialHandshake()
 	if err != nil {
 		return nil, err
 	}

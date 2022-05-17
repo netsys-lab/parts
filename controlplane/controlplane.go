@@ -171,28 +171,6 @@ func (cp *ControlPlane) NextPartId() int64 {
 	return cp.currentPartId
 }
 
-func (cp *ControlPlane) InitialHandshake(data []byte) error {
-	nextPartId := cp.NextPartId()
-	hs := NewPartsHandshake()
-
-	// TODO: Await Answer
-	hs.PartTransfers = make([]PartTransfer, 1)
-	hs.PartTransfers[0] = PartTransfer{
-		PartId:   uint64(nextPartId),
-		PartSize: uint64(len(data)),
-		Port:     0,
-	}
-	hs.LocalAddr = cp.Dataplane.LocalAddr().String()
-
-	err := hs.Encode()
-	if err != nil {
-		return err
-	}
-
-	cp.Dataplane.Write(hs.raw)
-	return nil
-}
-
 func (cp *ControlPlane) NextPartContext(data []byte) *dataplane.PartContext {
 	nextPartId := cp.NextPartId()
 	partContext := dataplane.PartContext{
@@ -213,6 +191,30 @@ func (cp *ControlPlane) NextPartContext(data []byte) *dataplane.PartContext {
 	partContext.Prepare()
 
 	return &partContext
+}
+
+func (cp *ControlPlane) InitialHandshake() error {
+	hs := NewPartsHandshake()
+
+	// TODO: Await Answer
+	hs.PartTransfers = make([]PartTransfer, 0)
+	hs.LocalAddr = cp.Dataplane.LocalAddr().String()
+
+	err := hs.Encode()
+	if err != nil {
+		return err
+	}
+
+	cp.Dataplane.Write(hs.raw)
+
+	retHs := NewPartsHandshake()
+	cp.Dataplane.Read(retHs.raw)
+	err = hs.Decode()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
@@ -261,6 +263,34 @@ func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 	partContext.Prepare()
 
 	return &partContext, nil
+}
+
+func (cp *ControlPlane) AwaitInitialHandshake() error {
+	hs := NewPartsHandshake()
+	cp.Dataplane.Read(hs.raw)
+	err := hs.Decode()
+	if err != nil {
+		return err
+	}
+
+	if cp.Dataplane.RemoteAddr() == nil {
+		cp.Dataplane.SetRemoteAddr(hs.LocalAddr)
+	}
+
+	retHs := NewPartsHandshake()
+
+	// TODO: Await Answer
+	retHs.PartTransfers = make([]PartTransfer, 0)
+	retHs.LocalAddr = cp.Dataplane.LocalAddr().String()
+
+	err = retHs.Encode()
+	if err != nil {
+		return err
+	}
+
+	cp.Dataplane.Write(retHs.raw)
+
+	return nil
 }
 
 func (cp *ControlPlane) AwaitHandshake(b []byte) (*dataplane.PartContext, error) {
