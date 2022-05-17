@@ -96,71 +96,81 @@ func Dial(localAddr, remoteAddr string) (*PartsConn, error) {
 func (p *PartsConn) Accept() error {
 	return p.controlplane.Accept()
 }
-func (p *PartsConn) Read(b []byte) (n int, err error) {
-	// TODO: Not overwrite if actually receiving
-	// p.part = b
-	// p.PartId = partId
 
-	// Check if Read is a single packet or larger one
-	if len(b) >= dataplane.PACKET_PAYLOAD_SIZE { // TODO correct size here...
-		// p.controlplane.A
-		partContext, err := p.controlplane.AwaitHandshake(b)
-		if err != nil {
-			return 0, err
-		}
-		p.controlplane.SetPartContext(partContext)
-		p.controlplane.Ratecontrol.Start()
-		p.controlplane.StartReadpart()
-		_, err = p.dataplane.ReadPart(partContext)
-		if err != nil {
-			return 0, err
-		}
-		p.controlplane.FinishReadpart()
-		// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
-		// log.Debugf("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
-		return len(b), nil
-		// p.partContext = partContext ?
-	} else {
-		n, err := p.dataplane.ReadSingle(b)
-		return int(n), err
+// This is for now an easy workaround before we know what exactly
+// to do with partial reads
+func (p *PartsConn) ReadPart() (n int, bts []byte, err error) {
+	// TODO: Do we need to cache the result and serve it for multiple Read calls
+	// We do not know how large b is, so we can't use it
+	partContext, err := p.dataplane.NextPartContext() // p.controlplane.AwaitHandshake(b)
+	if err != nil {
+		return 0, nil, err
 	}
+	partContext.OnPartStatusChange = func(numMsg int, bytes int) {
+		// log.Infof("Print on PartsConn %d", b.PartId)
+		p.controlplane.Ratecontrol.Add(numMsg, int64(bytes))
+	}
+	p.controlplane.SetPartContext(partContext)
+	p.controlplane.Ratecontrol.Start()
+	p.controlplane.StartReadpart()
+	_, err = p.dataplane.ReadPart(partContext)
+	if err != nil {
+		return 0, nil, err
+	}
+	p.controlplane.FinishReadpart()
+	// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
+	// log.Debugf("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
+	return len(partContext.Data), partContext.Data, nil
+}
+
+func (p *PartsConn) Read(b []byte) (n int, err error) {
+
+	// TODO: Do we need to cache the result and serve it for multiple Read calls
+	// We do not know how large b is, so we can't use it
+	partContext, err := p.dataplane.NextPartContext() // p.controlplane.AwaitHandshake(b)
+	if err != nil {
+		return 0, err
+	}
+	partContext.OnPartStatusChange = func(numMsg int, bytes int) {
+		// log.Infof("Print on PartsConn %d", b.PartId)
+		p.controlplane.Ratecontrol.Add(numMsg, int64(bytes))
+	}
+	p.controlplane.SetPartContext(partContext)
+	p.controlplane.Ratecontrol.Start()
+	p.controlplane.StartReadpart()
+	_, err = p.dataplane.ReadPart(partContext)
+	if err != nil {
+		return 0, err
+	}
+	p.controlplane.FinishReadpart()
+	// secondsBandwidth := (int64(len(partContext.Data)/1024/1024) * 8) / int64(elapsedTime/time.Second)
+	// log.Debugf("Received %d packets, partLen %d and md5 %x", partContext.NumPackets, len(b), md5.Sum(b))
+	return len(b), nil
+	// p.partContext = partContext ?
 }
 
 func (p *PartsConn) Write(b []byte) (n int, err error) {
 	// TODO: Save activePartCount and increase immediatly
 	// TODO: Not overwrite if actually sending
-	if len(b) >= dataplane.PACKET_PAYLOAD_SIZE {
-		partContext, err := p.controlplane.Handshake(b)
-		if err != nil {
-			return 0, err
-		}
-		p.controlplane.SetPartContext(partContext)
-		p.controlplane.Ratecontrol.Start()
-		log.Debugf("Writing %d packets", partContext.NumPackets)
-		// b.packets[b.activePartCount] = make([][]byte, len(part)/PACKET_SIZE)
-		// TODO: Waiting queue
-		// TODO: sync write calls
 
-		// b.RateControl.Start()
-		p.controlplane.StartWritepart()
-		n, err := p.dataplane.WritePart(partContext)
-		if err != nil {
-			return 0, err
-		}
+	partContext := p.controlplane.NextPartContext(b)
+	p.controlplane.SetPartContext(partContext)
+	p.controlplane.Ratecontrol.Start()
+	log.Debugf("Writing %d packets", partContext.NumPackets)
+	// TODO: Waiting queue
+	// TODO: sync write calls
 
-		log.Debugf("Wrote %d packets, partLen %d", partContext.NumPackets, len(b))
-		p.dataplane.RetransferMissingPackets()
-		p.controlplane.Ratecontrol.Stop()
-		p.controlplane.FinishWritepart()
-		return int(n), nil
-	} else {
-		partid := p.controlplane.NextPartId()
-		n, err := p.dataplane.WriteSingle(b, partid)
-		return int(n), err
+	p.controlplane.StartWritepart()
+	res, err := p.dataplane.WritePart(partContext)
+	if err != nil {
+		return int(res), err
 	}
 
-	// time.Sleep(100 * time.Second)
-
+	log.Debugf("Wrote %d packets, partLen %d", partContext.NumPackets, len(b))
+	p.dataplane.RetransferMissingPackets()
+	p.controlplane.Ratecontrol.Stop()
+	p.controlplane.FinishWritepart()
+	return int(res), nil
 }
 
 func (p *PartsConn) Close() error {

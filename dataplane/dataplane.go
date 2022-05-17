@@ -308,12 +308,36 @@ func (sts *SCIONDataplane) WriteSingle(data []byte, partId int64) (uint64, error
 
 	return uint64(n), nil
 }
+
+func (sts *SCIONDataplane) NextPartContext() (*PartContext, error) {
+
+	buf := make([]byte, PACKET_SIZE)
+	// TODO: Fill startIndex
+	partContext := NewWaitingContext()
+	for {
+		_, err := partContext.ReadFromConn(sts.Conn, buf)
+		if err != nil {
+			sts.PacketChan <- buf
+			continue
+		}
+
+		err = partContext.DeSerializeNewPacket(&buf)
+		if err != nil {
+			return nil, err
+		}
+		return partContext, nil
+
+	}
+
+}
+
 func (sts *SCIONDataplane) ReadPart(bc *PartContext) (uint64, error) {
 
 	buffer := bc.Buffer // make([]byte, bc.RecommendedBufferSize) // TODO: Move this into  ControlPlane.AwaitHandshake
 	var n uint64 = 0
 	var i int64
-	for i = 0; i < bc.NumPackets; i++ {
+	// We may already have the first packet here...
+	for i = bc.StartIndex; i < bc.NumPackets; i++ {
 		start := i * int64(bc.MaxPacketLength)
 		packetBuffer := buffer[start : start+int64(bc.MaxPacketLength)]
 		bts, err := bc.ReadFromConn(sts.Conn, packetBuffer)

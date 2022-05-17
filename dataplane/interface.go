@@ -74,6 +74,8 @@ type TransportDataplane interface {
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
 	Stop() error
+	// Read the complete part into partContext.Data
+	NextPartContext() (*PartContext, error)
 }
 
 type TransportPacketPacker interface {

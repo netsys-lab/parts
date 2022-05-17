@@ -193,6 +193,28 @@ func (cp *ControlPlane) InitialHandshake(data []byte) error {
 	return nil
 }
 
+func (cp *ControlPlane) NextPartContext(data []byte) *dataplane.PartContext {
+	nextPartId := cp.NextPartId()
+	partContext := dataplane.PartContext{
+		PartsPacketPacker:         dataplane.NewBinaryPartsPacketPacker(),
+		TransportPacketPacker:     dataplane.NewSCIONPacketPacker(),
+		MaxPacketLength:           dataplane.PACKET_SIZE,
+		PartId:                    nextPartId,
+		Data:                      data,
+		MissingSequenceNums:       make([]int64, 0),
+		MissingSequenceNumOffsets: make([]int64, 0),
+		OnPartStatusChange: func(numMsg int, bytes int) {
+			// log.Infof("Print on PartsConn %d", b.PartId)
+			cp.Ratecontrol.Add(numMsg, int64(bytes))
+		},
+	}
+	partContext.TransportPacketPacker.SetLocal(cp.Dataplane.LocalAddr())
+	partContext.TransportPacketPacker.SetRemote(cp.Dataplane.RemoteAddr())
+	partContext.Prepare()
+
+	return &partContext
+}
+
 func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 	nextPartId := cp.NextPartId()
 	hs := NewPartsHandshake()

@@ -47,6 +47,17 @@ type PartContext struct {
 	PartId                    int64
 	TestingMode               bool
 	RecvPackets               int
+	StartIndex                int64
+}
+
+func NewWaitingContext() *PartContext {
+	return &PartContext{
+		PartsPacketPacker:         NewBinaryPartsPacketPacker(),
+		TransportPacketPacker:     NewSCIONPacketPacker(),
+		MaxPacketLength:           PACKET_SIZE,
+		MissingSequenceNums:       make([]int64, 0),
+		MissingSequenceNumOffsets: make([]int64, 0),
+	}
 }
 
 func (b *PartContext) GetNextSequenceNumber() int64 {
@@ -81,6 +92,17 @@ func (b *PartContext) WriteToPacketConn(conn net.PacketConn, data []byte, adr ne
 
 func (b *PartContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int, net.Addr, error) {
 	return conn.ReadFrom(data)
+}
+
+func (b *PartContext) PrepareNew() {
+	b.MissingSequenceNums = make([]int64, 0)
+	b.MissingSequenceNumOffsets = make([]int64, 0)
+	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.PartsPacketPacker.GetHeaderLen()
+	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
+	b.RecommendedBufferSize = b.NumPackets * int64(b.MaxPacketLength)
+	log.Debugf("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
+	log.Debugf("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*int64(b.MaxPacketLength))
+	b.AppId = shared.AppId
 }
 
 func (b *PartContext) Prepare() {
@@ -180,15 +202,35 @@ func (b *PartContext) DeSerializePacket(packetBuffer *[]byte) error {
 	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
 	copy(b.Data[partStart:end], *packetBuffer)
 
-	// log.Infof("Copied %d bytes from %d to %d with payloadlen %d, md5 %x", len(b.Data[partStart:end]), partStart, end, b.PayloadLength, md5.Sum(b.Data[partStart:end]))
-	// os.Exit(1)
-	if p.SequenceNumber == 6025 {
-		log.Debugf("GOTCHA")
-	}
 	if diff > 0 {
 
 		b.HighestSequenceNumber = p.SequenceNumber // +=diff
 
 	}
+	return nil
+}
+
+func (b *PartContext) DeSerializeNewPacket(packetBuffer *[]byte) error {
+	// log.Infof("Received ")
+
+	b.TransportPacketPacker.Unpack(packetBuffer)
+	p, err := b.PartsPacketPacker.Unpack(packetBuffer, b)
+	if err != nil {
+		return err
+	}
+
+	// create buffer etc
+	b.PartId = p.PartId
+	b.NumPackets = p.PartPackets
+	b.PrepareNew()
+	b.Data = make([]byte, b.RecommendedBufferSize)
+
+	// TODO: What happens when first part packet is lost
+	partStart := int(p.SequenceNumber-1) * b.PayloadLength
+	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
+	copy(b.Data[partStart:end], *packetBuffer)
+	b.HighestSequenceNumber = p.SequenceNumber // +=diff
+	b.StartIndex = 1
+
 	return nil
 }
