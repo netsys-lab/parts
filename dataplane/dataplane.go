@@ -176,7 +176,7 @@ func (dp *SCIONDataplane) RetransferMissingPackets() {
 				// packet := b.packets[v-1]
 
 				// TODO: How to get already cached packet here, otherwise at least payload
-				packet := dp.partContext.GetPayloadByPacketIndex(int(v) + j - 1)
+				packet := dp.partContext.GetPayloadByPacketIndex(v + int64(j-1))
 				buf := make([]byte, len(packet)+dp.partContext.PartsPacketPacker.GetHeaderLen())
 				copy(buf[dp.partContext.PartsPacketPacker.GetHeaderLen():], packet)
 				// log.Infof("Retransferring md5 %x for sequenceNumber %d", md5.Sum(packet), v+int64(j))
@@ -210,8 +210,9 @@ func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {
 	var n uint64 = 0
 	sts.partContext = bc
 	log.Debugf("Writing part %d", bc.PartId)
+	var i int64
 	// log.Debugf("Write with %d packets with md5 %x", bc.NumPackets, md5.Sum(bc.Data))
-	for i := 0; i < bc.NumPackets; i++ {
+	for i = 0; i < bc.NumPackets; i++ {
 		payload := bc.GetPayloadByPacketIndex(i)
 		buf := make([]byte, len(payload)+bc.PartsPacketPacker.GetHeaderLen())
 		copy(buf[bc.PartsPacketPacker.GetHeaderLen():], payload)
@@ -311,9 +312,10 @@ func (sts *SCIONDataplane) ReadPart(bc *PartContext) (uint64, error) {
 
 	buffer := bc.Buffer // make([]byte, bc.RecommendedBufferSize) // TODO: Move this into  ControlPlane.AwaitHandshake
 	var n uint64 = 0
-	for i := 0; i < bc.NumPackets; i++ {
-		start := i * bc.MaxPacketLength
-		packetBuffer := buffer[start : start+bc.MaxPacketLength]
+	var i int64
+	for i = 0; i < bc.NumPackets; i++ {
+		start := i * int64(bc.MaxPacketLength)
+		packetBuffer := buffer[start : start+int64(bc.MaxPacketLength)]
 		bts, err := bc.ReadFromConn(sts.Conn, packetBuffer)
 		if err != nil {
 			return 0, err

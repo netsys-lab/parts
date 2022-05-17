@@ -83,6 +83,13 @@ func Min(x, y int) int {
 	return x
 }
 
+func Min64(x, y int64) int64 {
+	if x > y {
+		return y
+	}
+	return x
+}
+
 func CeilForce(x, y int64) int64 {
 	res := x / y
 	f := float64(x) / float64(y)
@@ -94,6 +101,16 @@ func CeilForce(x, y int64) int64 {
 }
 
 func CeilForceInt(x, y int) int {
+	res := x / y
+	f := float64(x) / float64(y)
+	if f > float64(res) {
+		return res + 1
+	} else {
+		return res
+	}
+}
+
+func CeilForceInt64(x, y int64) int64 {
 	res := x / y
 	f := float64(x) / float64(y)
 	if f > float64(res) {

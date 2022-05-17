@@ -32,8 +32,10 @@ type PartContext struct {
 	// This must be defined by the TransportSocket, since its the only instance who knows
 	// how big headers are actually.
 	PayloadLength             int
-	NumPackets                int
-	RecommendedBufferSize     int
+	NumPackets                int64
+	AppId                     int64
+	Flags                     int32
+	RecommendedBufferSize     int64
 	HeaderLength              int
 	Data                      []byte
 	Buffer                    []byte
@@ -51,9 +53,9 @@ func (b *PartContext) GetNextSequenceNumber() int64 {
 	return b.currentSequenceNumber
 }
 
-func (b *PartContext) GetPayloadByPacketIndex(i int) []byte {
-	partStart := i * b.PayloadLength
-	end := utils.Min(partStart+b.PayloadLength, len(b.Data))
+func (b *PartContext) GetPayloadByPacketIndex(i int64) []byte {
+	partStart := i * int64(b.PayloadLength)
+	end := utils.Min64(partStart+int64(b.PayloadLength), int64(len(b.Data)))
 	return b.Data[partStart:end]
 }
 
@@ -85,11 +87,11 @@ func (b *PartContext) Prepare() {
 	b.MissingSequenceNumOffsets = make([]int64, 0)
 	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.PartsPacketPacker.GetHeaderLen()
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
-	b.NumPackets = utils.CeilForceInt(len(b.Data), b.PayloadLength)
-	b.RecommendedBufferSize = b.NumPackets * b.MaxPacketLength
+	b.NumPackets = utils.CeilForceInt64(int64(len(b.Data)), int64(b.PayloadLength))
+	b.RecommendedBufferSize = b.NumPackets * int64(b.MaxPacketLength)
 	log.Debugf("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
 	log.Debugf("Having NumPackets %d = len(b.Data) %d / b.PayloadLen %d", b.NumPackets, len(b.Data), b.PayloadLength)
-	log.Debugf("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*b.MaxPacketLength)
+	log.Debugf("Recommended buffer size %d, numPackets %d * MaxPacketLen %d = %d", b.RecommendedBufferSize, b.NumPackets, b.MaxPacketLength, b.NumPackets*int64(b.MaxPacketLength))
 
 	if b.TestingMode && !testingState.BufferCreated {
 		testingState.BufferCreated = true

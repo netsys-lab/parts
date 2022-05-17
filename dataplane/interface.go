@@ -19,16 +19,12 @@ type PartRequestPacket struct {
 	PartFinished                 bool
 }
 
-type PartSinglePacket struct {
-	PartId  int64
-	Payload []byte
-}
-
 type PartPacket struct {
-	SequenceNumber int64
+	Flags          int32
+	AppId          int64
 	PartId         int64
-	PartSize       int64
-	Payload        []byte
+	PartPackets    int64
+	SequenceNumber int64
 }
 
 type SocketOptions struct {

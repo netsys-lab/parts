@@ -20,25 +20,42 @@ func NewBinaryPartsPacketPacker() PartsPacketPacker {
 }
 
 func (bp *BinaryPartsPacketPacker) GetHeaderLen() int {
-	return 16
+	return 36
 }
 
 func (bp *BinaryPartsPacketPacker) PackRetransfer(buf *[]byte, sequenceNumber int64, partContext *PartContext) error {
-	binary.BigEndian.PutUint64((*buf)[8:16], uint64(sequenceNumber))
-	binary.BigEndian.PutUint64((*buf)[0:8], uint64(partContext.PartId))
+	/*Flags          int32
+	AppId          int64
+	PartId         int64
+	PartPackets       int64
+	SequenceNumber int64
+	Payload        []byte*/
+	binary.BigEndian.PutUint32((*buf)[0:4], uint32(partContext.Flags))
+	binary.BigEndian.PutUint64((*buf)[4:12], uint64(partContext.AppId))
+	binary.BigEndian.PutUint64((*buf)[12:20], uint64(partContext.PartId))
+	binary.BigEndian.PutUint64((*buf)[20:28], uint64(partContext.NumPackets))
+	binary.BigEndian.PutUint64((*buf)[28:36], uint64(sequenceNumber))
 	return nil
 }
 
 func (bp *BinaryPartsPacketPacker) Pack(buf *[]byte, partContext *PartContext) error {
 	sequenceNumber := partContext.GetNextSequenceNumber()
-	binary.BigEndian.PutUint64((*buf)[8:16], uint64(sequenceNumber))
-	binary.BigEndian.PutUint64((*buf)[0:8], uint64(partContext.PartId))
+	binary.BigEndian.PutUint32((*buf)[0:4], uint32(partContext.Flags))
+	binary.BigEndian.PutUint64((*buf)[4:12], uint64(partContext.AppId))
+	binary.BigEndian.PutUint64((*buf)[12:20], uint64(partContext.PartId))
+	binary.BigEndian.PutUint64((*buf)[20:28], uint64(partContext.NumPackets))
+	binary.BigEndian.PutUint64((*buf)[28:36], uint64(sequenceNumber))
 	return nil
 }
 func (bp *BinaryPartsPacketPacker) Unpack(buf *[]byte, partContext *PartContext) (*PartPacket, error) {
 	p := PartPacket{}
-	p.SequenceNumber = (int64(binary.BigEndian.Uint64((*buf)[8:16])))
-	p.PartId = (int64(binary.BigEndian.Uint64((*buf)[0:8])))
+	p.Flags = int32(binary.BigEndian.Uint32((*buf)[0:4]))
+	p.AppId = int64(binary.BigEndian.Uint64((*buf)[4:12]))
+	p.PartId = int64(binary.BigEndian.Uint64((*buf)[12:20]))
+	p.PartPackets = int64(binary.BigEndian.Uint64((*buf)[20:28]))
+	p.SequenceNumber = (int64(binary.BigEndian.Uint64((*buf)[28:36])))
+
+	// TODO: Ensure new part announces without handshake
 	if p.PartId != partContext.PartId {
 		return nil, errors.New("mismatching partId")
 	}
