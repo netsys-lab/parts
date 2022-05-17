@@ -5,3 +5,4 @@ parts
 example/example
 example/filetransfer/*.gz
 example/filetransfer/filetransfer
+example/singleconn/singleconn

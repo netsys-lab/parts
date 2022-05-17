@@ -11,7 +11,7 @@
         "mode": "debug",
         "program": "${workspaceFolder}/example/local/",
         "go.alternateTools": { "go": "/usr/local/go/bin/go" },
-        "env": {"ENABLE_FAST": true}
+        "env": {"ENABLE_FAST": "true"}
     },
     {
         "name": "Filetransfer server",
@@ -21,7 +21,7 @@
         "program": "${workspaceFolder}/example/filetransfer/",
         "go.alternateTools": { "go": "/usr/local/go/bin/go" },
         "args": ["-mode=server","-server=19-ffaa:1:cf1,[127.0.0.1]:8000", "-path=./output.file"],
-        "env": {"ENABLE_FAST": true}
+        "env": {"ENABLE_FAST": "true"}
     },
     {
         "name": "Filetransfer client",
@@ -31,7 +31,17 @@
         "program": "${workspaceFolder}/example/filetransfer/",
         "go.alternateTools": { "go": "/usr/local/go/bin/go" },
         "args": ["-mode=client", "-server=19-ffaa:1:cf1,[127.0.0.1]:8000", "-client=19-ffaa:1:cf1,[127.0.0.1]:9000", "-path=./go1.17.2.linux-amd64.tar.gz"],
-        "env": {"ENABLE_FAST": true}
+        "env": {"ENABLE_FAST": "true"}
+    },
+    {
+        "name": "Singleconn server",
+        "type": "go",
+        "request": "launch",
+        "mode": "debug",
+        "program": "${workspaceFolder}/example/singleconn/",
+        "go.alternateTools": { "go": "/usr/local/go/bin/go" },
+        "args": ["-mode=server", "-server=19-ffaa:1:cf1,[127.0.0.1]:8000"],
+        "env": {"ENABLE_FAST": "true"}
     },
     ]
 }

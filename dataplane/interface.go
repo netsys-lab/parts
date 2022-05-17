@@ -24,6 +24,7 @@ type PartPacket struct {
 	AppId          int64
 	PartId         int64
 	PartPackets    int64
+	PartSize       int64
 	SequenceNumber int64
 }
 

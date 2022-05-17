@@ -178,6 +178,7 @@ func (cp *ControlPlane) NextPartContext(data []byte) *dataplane.PartContext {
 		TransportPacketPacker:     dataplane.NewSCIONPacketPacker(),
 		MaxPacketLength:           dataplane.PACKET_SIZE,
 		PartId:                    nextPartId,
+		PartSize:                  int64(len(data)),
 		Data:                      data,
 		MissingSequenceNums:       make([]int64, 0),
 		MissingSequenceNumOffsets: make([]int64, 0),

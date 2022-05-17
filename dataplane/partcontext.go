@@ -39,6 +39,7 @@ type PartContext struct {
 	RecommendedBufferSize     int64
 	HeaderLength              int
 	Data                      []byte
+	PartSize                  int64
 	Buffer                    []byte
 	HighestSequenceNumber     int64
 	MissingSequenceNums       []int64
@@ -97,7 +98,7 @@ func (b *PartContext) ReadFromPacketConn(conn net.PacketConn, data []byte) (int,
 func (b *PartContext) PrepareNew() {
 	b.MissingSequenceNums = make([]int64, 0)
 	b.MissingSequenceNumOffsets = make([]int64, 0)
-	b.HeaderLength = b.TransportPacketPacker.GetHeaderLen() + b.PartsPacketPacker.GetHeaderLen()
+	b.HeaderLength = 0 + b.PartsPacketPacker.GetHeaderLen()
 	b.PayloadLength = b.MaxPacketLength - b.HeaderLength
 	b.RecommendedBufferSize = b.NumPackets * int64(b.MaxPacketLength)
 	log.Debugf("Having HeaderLength %d, PayloadLength %d", b.HeaderLength, b.PayloadLength)
@@ -221,9 +222,12 @@ func (b *PartContext) DeSerializeNewPacket(packetBuffer *[]byte) error {
 
 	// create buffer etc
 	b.PartId = p.PartId
+	b.PartSize = p.PartSize
+	log.Warnf("Setting net partId %d", b.PartId)
 	b.NumPackets = p.PartPackets
 	b.PrepareNew()
-	b.Data = make([]byte, b.RecommendedBufferSize)
+	b.Buffer = make([]byte, b.RecommendedBufferSize)
+	b.Data = make([]byte, b.PartSize)
 
 	// TODO: What happens when first part packet is lost
 	partStart := int(p.SequenceNumber-1) * b.PayloadLength

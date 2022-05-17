@@ -1,27 +1,19 @@
 package main
 
 import (
-	"bytes"
-	"crypto/md5"
-	"encoding/gob"
-	"io/ioutil"
-
 	"github.com/anacrolix/tagflag"
 	parts "github.com/netsys-lab/parts/api"
 	log "github.com/sirupsen/logrus"
 )
 
 var flags = struct {
-	Server  string
-	Client  string
-	Mode    string
-	NumCons int
-	Path    string
+	Server string
+	Client string
+	Mode   string
 }{
-	Server:  "19-ffaa:1:cf1,[127.0.0.1]:8000",
-	Client:  "19-ffaa:1:cf1,[127.0.0.1]:8001",
-	Mode:    "singlehost", // "server" | "client" | "singlehost"
-	NumCons: 1,
+	Server: "19-ffaa:1:cf1,[127.0.0.1]:8000",
+	Client: "19-ffaa:1:cf1,[127.0.0.1]:8001",
+	Mode:   "client", // "server" | "client" | "singlehost"
 }
 
 type MetaPacket struct {
@@ -46,98 +38,25 @@ func main() {
 			log.Fatal(err)
 		}
 
-		log.Infof("Accepting file handshake...")
-		metaPacket, err := incomingHandshake(conn)
+		n, buf, err := conn.ReadPart()
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		log.Infof("Reading file...")
-		file := make([]byte, metaPacket.FileSize)
-		_, err = conn.Read(file)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Infof("Read successful %d bytes, got md5 %x for expected md5 %x", len(file), md5.Sum(file), metaPacket.Md5)
+		log.Infof("Read part successfully, got %d bytes and buflen %d", n, len(buf))
 
 	} else {
-		log.Infof("Running in client mode, listening on %s and dialing to %s", flags.Client, flags.Server)
-		log.Infof("Loading file %s to RAM", flags.Path)
-		file, err := ioutil.ReadFile(flags.Path)
-		if err != nil {
-			log.Fatal(err)
-		}
+		buf := make([]byte, 2000)
 		log.Infof("Finished loading. Dialing to server...")
 		conn, err := parts.Dial(flags.Client, flags.Server)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Infof("Starting file handshake...")
-		metaPacket, err := outgoingHandshake(conn, file)
+
+		n, err := conn.Write(buf)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		log.Infof("Starting file transfer...")
-		_, err = conn.Write(file)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Infof("Write successful for %d bytes and md5 %x ", len(file), metaPacket.Md5)
+		log.Infof("Wrote part successfully, got %d bytes and buflen %d", n, len(buf))
 	}
-}
-
-func outgoingHandshake(socket *parts.PartsConn, file []byte) (*MetaPacket, error) {
-	metaPacket := MetaPacket{
-		FileSize: len(file),
-		Md5:      md5.Sum(file),
-	}
-	log.Debugf("GOt md5")
-	var network bytes.Buffer
-	enc := gob.NewEncoder(&network)
-	err := enc.Encode(metaPacket)
-	if err != nil {
-		return nil, err
-	}
-	_, err = socket.Write(network.Bytes())
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debugf("Wrote packet")
-
-	buf := make([]byte, 1000)
-	_, err = socket.Read(buf)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("FInished outgoinf")
-	return &metaPacket, nil
-}
-
-func incomingHandshake(socket *parts.PartsConn) (*MetaPacket, error) {
-	buf := make([]byte, 1000)
-	bts, err := socket.Read(buf)
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("Meta packet2")
-	network := bytes.NewBuffer(buf[:bts])
-	dec := gob.NewDecoder(network)
-	metaPacket := MetaPacket{}
-	log.Infof("Meta packet")
-	err = dec.Decode(&metaPacket)
-	if err != nil {
-		return nil, err
-	}
-	var n bytes.Buffer
-	enc := gob.NewEncoder(&n)
-	err = enc.Encode(metaPacket)
-	if err != nil {
-		return nil, err
-	}
-	_, err = socket.Write(n.Bytes())
-	return &metaPacket, nil
 }
