@@ -148,7 +148,7 @@ func (cp *ControlPlane) HandleAckPackets(stopChan *chan bool) {
 				continue
 			}
 			finished := cp.handlePartAckPacket(ackPacket)
-			log.Infof("HandlePartAckPacket result %b", finished)
+			// log.Infof("HandlePartAckPacket result %b", finished)
 			log.Error("%v", ackPacket)
 			if finished {
 				return
@@ -159,6 +159,7 @@ func (cp *ControlPlane) HandleAckPackets(stopChan *chan bool) {
 
 }
 
+// TODO: Unused
 func (cp *ControlPlane) readControlPackets(stopChan *chan bool) {
 	for {
 		select {
@@ -371,8 +372,8 @@ func (cp *ControlPlane) handlePartAckPacket(p *PartAckPacket) bool {
 		cp.state = CP_STATE_PENDING
 		log.Warnf("%v", p)
 		cp.Dataplane.SetState(dataplane.DP_STATE_PENDING)
-		buf := make([]byte, 100)
-		cp.Dataplane.Write(buf)
+		// buf := make([]byte, 100)
+		// cp.Dataplane.Write(buf)
 		return true
 		// partsConn.mode = MODE_DONE
 		// continue
@@ -428,11 +429,11 @@ func (cp *ControlPlane) sendPartFinish() error {
 	if err != nil {
 		return err
 	}
-	buf := make([]byte, 100)
+	/*buf := make([]byte, 100)
 	_, err = cp.Dataplane.Read(buf)
 	if err != nil {
 		return err
-	}
+	}*/
 
 	return err
 }

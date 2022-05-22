@@ -15,11 +15,11 @@ type PartsPacketPacker interface {
 }
 
 type BinaryPartsPacketPacker struct {
-	Flags int64
+	Flags int32
 }
 
 func NewBinaryPartsPacketPacker() PartsPacketPacker {
-	var flags int64
+	var flags int32
 	flags = shared.NewPartsFlags()
 	flags = shared.AddMsgFlag(flags, shared.PARTS_MSG_DATA)
 	return &BinaryPartsPacketPacker{

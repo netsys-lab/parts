@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/anacrolix/tagflag"
 	parts "github.com/netsys-lab/parts/api"
 	log "github.com/sirupsen/logrus"
@@ -74,6 +76,7 @@ func main() {
 
 		log.Infof("Wrote part successfully, got %d bytes and buflen %d", n, len(buf))
 
+		time.Sleep(3 * time.Second)
 		n, err = conn.Write(buf)
 		if err != nil {
 			log.Fatal(err)

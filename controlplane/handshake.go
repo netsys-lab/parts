@@ -10,7 +10,7 @@ import (
 )
 
 type PartsHandshake struct {
-	Flags                     int64
+	Flags                     int32
 	Reserved                  uint32
 	MTU                       uint32
 	InterfaceSpeed            uint64
@@ -36,8 +36,8 @@ func (hs *PartsHandshake) prepareFlags() {
 }
 
 func (hs *PartsHandshake) Decode() error {
-	flags := int64(binary.BigEndian.Uint64(hs.raw))
-	network := bytes.NewBuffer(hs.raw[8:])
+	flags := int32(binary.BigEndian.Uint32(hs.raw))
+	network := bytes.NewBuffer(hs.raw[4:])
 	dec := gob.NewDecoder(network)
 	err := dec.Decode(hs)
 	if err != nil {
@@ -56,7 +56,7 @@ func (hs *PartsHandshake) Encode() error {
 	if err != nil {
 		return err
 	}
-	binary.BigEndian.PutUint64(hs.raw, uint64(hs.Flags))
-	copy(hs.raw[8:], network.Bytes())
+	binary.BigEndian.PutUint32(hs.raw, uint32(hs.Flags))
+	copy(hs.raw[4:], network.Bytes())
 	return nil
 }

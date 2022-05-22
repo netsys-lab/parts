@@ -224,6 +224,10 @@ func (sts *SCIONDataplane) WritePart(bc *PartContext) (uint64, error) {
 			return 0, err
 		}
 		n += uint64(bts)
+
+		// if i == 0 {
+		//	time.Sleep(1 * time.Second)
+		// }
 	}
 	return n, nil
 }
@@ -346,7 +350,8 @@ func (sts *SCIONDataplane) ReadPart(bc *PartContext) (uint64, error) {
 			return 0, err
 		}
 		// Check msg type here...
-		msg := int64(binary.BigEndian.Uint64(packetBuffer[0:8])) & int64(shared.MASK_FLAGS_MSG)
+		val := int32(binary.BigEndian.Uint32(packetBuffer[0:4]))
+		msg := val & int32(shared.MASK_FLAGS_MSG)
 		if msg != shared.PARTS_MSG_DATA && msg != shared.PARTS_MSG_RT {
 			// Pass to control plane to check if its some control packet
 			sts.PacketChan <- packetBuffer

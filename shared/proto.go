@@ -17,16 +17,16 @@ const (
 	PARTS_VERSION = 1 << 24
 )
 
-func NewPartsFlags() int64 {
-	var flags int64 = 0
+func NewPartsFlags() int32 {
+	var flags int32 = 0
 	flags = AddVersionFlag(PARTS_VERSION, MASK_FLAGS_VERSION)
 	return flags
 }
 
-func AddMsgFlag(val, flag int64) int64 {
+func AddMsgFlag(val, flag int32) int32 {
 	return val | (flag & MASK_FLAGS_MSG)
 }
 
-func AddVersionFlag(val, flag int64) int64 {
+func AddVersionFlag(val, flag int32) int32 {
 	return val | (flag & MASK_FLAGS_VERSION)
 }
