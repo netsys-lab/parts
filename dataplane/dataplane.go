@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/netsec-ethz/scion-apps/pkg/appnet"
+	"github.com/netsys-lab/parts/shared"
 	optimizedconn "github.com/netsys-lab/scion-optimized-connection/pkg"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
@@ -344,14 +345,21 @@ func (sts *SCIONDataplane) ReadPart(bc *PartContext) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		err = bc.DeSerializePacket(&packetBuffer)
-		if err == nil {
-			n += uint64(bts)
-			bc.RecvPackets++
-			bc.OnPartStatusChange(1, bts)
-		} else {
+		// Check msg type here...
+		msg := int64(binary.BigEndian.Uint64(packetBuffer[0:8])) & int64(shared.MASK_FLAGS_MSG)
+		if msg != shared.PARTS_MSG_DATA && msg != shared.PARTS_MSG_RT {
 			// Pass to control plane to check if its some control packet
 			sts.PacketChan <- packetBuffer
+		} else {
+			err = bc.DeSerializePacket(&packetBuffer)
+			if err == nil {
+				n += uint64(bts)
+				bc.RecvPackets++
+				bc.OnPartStatusChange(1, bts)
+			} else { // This should not be happen since we check the PROTO_MSG before, but just to be sure
+				// Pass to control plane to check if its some control packet
+				sts.PacketChan <- packetBuffer
+			}
 		}
 
 	}

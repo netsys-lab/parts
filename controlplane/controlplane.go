@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/netsys-lab/parts/dataplane"
+	"github.com/netsys-lab/parts/shared"
 	"github.com/netsys-lab/parts/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -215,6 +216,7 @@ func (cp *ControlPlane) InitialHandshake() error {
 	// TODO: Await Answer
 	hs.PartTransfers = make([]PartTransfer, 0)
 	hs.LocalAddr = cp.Dataplane.LocalAddr().String()
+	hs.Flags = shared.AddMsgFlag(hs.Flags, shared.PARTS_MSG_HS)
 
 	err := hs.Encode()
 	if err != nil {
@@ -245,7 +247,7 @@ func (cp *ControlPlane) Handshake(data []byte) (*dataplane.PartContext, error) {
 		Port:     0,
 	}
 	hs.LocalAddr = cp.Dataplane.LocalAddr().String()
-
+	hs.Flags = shared.AddMsgFlag(hs.Flags, shared.PARTS_MSG_HS)
 	err := hs.Encode()
 	if err != nil {
 		return nil, err
@@ -298,7 +300,7 @@ func (cp *ControlPlane) AwaitInitialHandshake() error {
 	// TODO: Await Answer
 	retHs.PartTransfers = make([]PartTransfer, 0)
 	retHs.LocalAddr = cp.Dataplane.LocalAddr().String()
-
+	retHs.Flags = shared.AddMsgFlag(retHs.Flags, shared.PARTS_MSG_HS)
 	err = retHs.Encode()
 	if err != nil {
 		return err
@@ -323,7 +325,7 @@ func (cp *ControlPlane) AwaitHandshake(b []byte) (*dataplane.PartContext, error)
 	}
 
 	retHs := NewPartsHandshake()
-
+	retHs.Flags = shared.AddMsgFlag(retHs.Flags, shared.PARTS_MSG_HS)
 	// TODO: Await Answer
 	retHs.PartTransfers = make([]PartTransfer, 1)
 	retHs.PartTransfers[0] = PartTransfer{

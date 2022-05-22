@@ -43,5 +43,15 @@
         "args": ["-mode=server", "-server=19-ffaa:1:cf1,[127.0.0.1]:8000"],
         "env": {"ENABLE_FAST": "true"}
     },
+    {
+        "name": "Singleconn client",
+        "type": "go",
+        "request": "launch",
+        "mode": "debug",
+        "program": "${workspaceFolder}/example/singleconn/",
+        "go.alternateTools": { "go": "/usr/local/go/bin/go" },
+        "args": ["-mode=client", "-server=19-ffaa:1:cf1,[127.0.0.1]:8000", "-client=19-ffaa:1:cf1,[127.0.0.1]:8001"],
+        "env": {"ENABLE_FAST": "true"}
+    },
     ]
 }
