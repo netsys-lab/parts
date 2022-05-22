@@ -3,6 +3,8 @@ package dataplane
 import (
 	"encoding/binary"
 	"errors"
+
+	"github.com/netsys-lab/parts/shared"
 )
 
 type PartsPacketPacker interface {
@@ -13,10 +15,16 @@ type PartsPacketPacker interface {
 }
 
 type BinaryPartsPacketPacker struct {
+	Flags int64
 }
 
 func NewBinaryPartsPacketPacker() PartsPacketPacker {
-	return &BinaryPartsPacketPacker{}
+	var flags int64
+	flags = shared.NewPartsFlags()
+	flags = shared.AddMsgFlag(flags, shared.PARTS_MSG_DATA)
+	return &BinaryPartsPacketPacker{
+		Flags: flags,
+	}
 }
 
 func (bp *BinaryPartsPacketPacker) GetHeaderLen() int {
@@ -41,7 +49,7 @@ func (bp *BinaryPartsPacketPacker) PackRetransfer(buf *[]byte, sequenceNumber in
 
 func (bp *BinaryPartsPacketPacker) Pack(buf *[]byte, partContext *PartContext) error {
 	sequenceNumber := partContext.GetNextSequenceNumber()
-	binary.BigEndian.PutUint32((*buf)[0:4], uint32(partContext.Flags))
+	binary.BigEndian.PutUint32((*buf)[0:4], uint32(bp.Flags)) // TODO: PartContext flags
 	binary.BigEndian.PutUint64((*buf)[4:12], uint64(partContext.AppId))
 	binary.BigEndian.PutUint64((*buf)[12:20], uint64(partContext.PartId))
 	binary.BigEndian.PutUint64((*buf)[20:28], uint64(partContext.NumPackets))
